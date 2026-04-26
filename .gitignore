@@ -1,0 +1,56 @@
+# ── Segredos — nunca sobem ──────────────────────
+backend/.env
+frontend/.env
+
+# ── Dependências — recriadas localmente ─────────
+frontend/node_modules/
+backend/venv/
+backend/__pycache__/
+backend/routes/__pycache__/
+
+# ── Build gerado — não precisa versionar ────────
+frontend/dist/
+
+# ── Logs — gerados em runtime ───────────────────
+backend/logs/
+frontend/logs/
+
+# ── Sistema operacional ─────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editores de código ──────────────────────────
+.vscode/
+.idea/
+*.swp
+
+# Backend
+backend/venv/
+backend/venv.*
+backend/__pycache__/
+backend/logs/
+backend/*.log
+backend/.pytest_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/*.log
+frontend/.pnp.*
+
+# Environment (importante para não subir senhas!)
+backend/.env
+.env.local
+*.env
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
