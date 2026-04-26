@@ -1,14 +1,32 @@
 import { useState, useEffect } from 'react'
-import { getLeads, getStatuses } from '../api/client'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, Phone, MessageSquare, ChevronRight, RefreshCw, ArrowLeft, Target } from 'lucide-react'
+import { CheckCircle, Phone, MessageSquare, ChevronRight, RefreshCw, ArrowLeft, Target, Clock, Save, Link2 } from 'lucide-react'
+import { getLeads, getStatuses, updateLead, addActivity } from '../api/client'
+import toast from 'react-hot-toast'
+import { formatForDisplay, isToday, isOverdue, parseSafe } from '../utils/date'
 
 export default function FocusMode() {
   const [leads, setLeads] = useState([])
   const [statuses, setStatuses] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState('')
+  const [selectedStatus, setSelectedStatus] = useState('')
+  const [seconds, setSeconds] = useState(0)
   const navigate = useNavigate()
+
+  // Timer logic
+  useEffect(() => {
+    const timer = setInterval(() => setSeconds(s => s + 1), 1000)
+    return () => clearInterval(timer)
+  }, [currentIndex])
+
+  const formatTime = (sec) => {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${m}:${s < 10 ? '0' : ''}${s}`
+  }
   
   useEffect(() => {
     const load = async () => {
@@ -20,10 +38,9 @@ export default function FocusMode() {
         const pending = data
           .filter(lead => {
              if (!lead.next_contact) return false;
-             const dt = new Date(lead.next_contact + 'T12:00:00');
-             return dt <= hoje;
+             return isToday(lead.next_contact) || isOverdue(lead.next_contact);
           })
-          .sort((a,b) => new Date(a.next_contact) - new Date(b.next_contact))
+          .sort((a,b) => parseSafe(a.next_contact) - parseSafe(b.next_contact))
           
         setLeads(pending)
         setStatuses(s.data)
@@ -32,6 +49,14 @@ export default function FocusMode() {
     }
     load()
   }, [])
+
+  useEffect(() => {
+    if (leads[currentIndex]) {
+      setSelectedStatus(leads[currentIndex].status_id)
+      setNote('')
+      setSeconds(0)
+    }
+  }, [currentIndex, leads])
 
   if (loading) return <div className="flex justify-center py-20"><RefreshCw className="w-5 h-5 text-brand-500 animate-spin" /></div>
 
@@ -53,7 +78,26 @@ export default function FocusMode() {
   const lead = leads[currentIndex]
   const st = statuses.find(s => String(s.id) === String(lead.status_id))
 
-  const handleNext = () => setCurrentIndex(prev => prev + 1)
+  const handleSaveAndNext = async () => {
+    setSaving(true)
+    try {
+      // 1. Add activity if there's a note
+      if (note.trim()) {
+        await addActivity(lead.id, { content: note, type: 'note' })
+      }
+      
+      // 2. Update status if changed
+      if (String(selectedStatus) !== String(lead.status_id)) {
+        await updateLead(lead.id, { ...lead, status_id: selectedStatus })
+      }
+
+      toast.success('Progresso salvo!')
+      setCurrentIndex(prev => prev + 1)
+    } catch (err) {
+      toast.error('Erro ao salvar progresso')
+    }
+    setSaving(false)
+  }
   
   const whatsappUrl = (phone, text = '') => {
     const num = phone?.replace(/\D/g, '') || ''
@@ -91,29 +135,80 @@ export default function FocusMode() {
           </a>
         </div>
         
-        <div className="bg-surface-900 rounded-xl p-5 text-sm space-y-3 border border-surface-800/50 shadow-inner">
-          <div className="flex justify-between items-center">
-             <span className="text-surface-500">Agendado para</span>
-             <span className="font-bold text-amber-400">{new Date(lead.next_contact + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+        <div className="bg-surface-950/50 rounded-2xl p-5 border border-surface-800 space-y-4 shadow-inner">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-bold text-surface-500 uppercase tracking-widest flex items-center gap-2">
+              <Clock className="w-3 h-3" /> Tempo em atendimento: <span className="text-brand-400 font-mono">{formatTime(seconds)}</span>
+            </h3>
           </div>
-          <div className="flex justify-between items-center">
-             <span className="text-surface-500">Origem</span>
-             <span className="text-surface-200">{lead.platform_icon} {lead.platform_name || '—'}</span>
+          
+          <div className="space-y-3">
+            <label className="text-xs font-semibold text-surface-400">Alterar Status</label>
+            <div className="flex flex-wrap gap-2">
+              {statuses.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedStatus(s.id)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
+                    String(selectedStatus) === String(s.id) 
+                    ? 'border-brand-500 bg-brand-500/10 text-brand-400' 
+                    : 'border-surface-700 bg-surface-800 text-surface-400 hover:border-surface-600'
+                  }`}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
           </div>
-          {lead.interest && (
-             <div className="pt-3 mt-3 border-t border-surface-800/50">
-               <span className="text-surface-500 block mb-1">Interesse</span>
-               <span className="text-surface-200 leading-relaxed">{lead.interest}</span>
-             </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-surface-400">Anotações Rápidas</label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="O que foi conversado? Próximos passos..."
+              className="input bg-surface-800 border-surface-700 text-sm min-h-[100px] resize-none focus:ring-brand-500/20"
+            />
+          </div>
+
+          {lead.specific_video && (
+            <div className="pt-2">
+               <button 
+                onClick={async () => {
+                  try {
+                    const { generateTrackedLink } = await import('../api/client');
+                    const res = await generateTrackedLink({ lead_id: lead.id, url: lead.specific_video });
+                    const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
+                    navigator.clipboard.writeText(fullUrl);
+                    toast.success('Link rastreável copiado!');
+                  } catch (err) {
+                    toast.error('Erro ao gerar link');
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-brand-500/30 bg-brand-500/5 text-brand-400 text-xs font-bold hover:bg-brand-500/10 transition-all"
+               >
+                 <Link2 className="w-3.5 h-3.5" /> GERAR E COPIAR LINK RASTREÁVEL
+               </button>
+            </div>
           )}
         </div>
 
         <div className="pt-2">
-          <button onClick={() => navigate('/meus-leads', { state: { selectedLead: lead.id } })} className="btn-secondary w-full mb-3 text-sm font-medium h-11">
-             Ver Histórico Completo
+          <button 
+            onClick={handleSaveAndNext} 
+            disabled={saving}
+            className="btn-primary w-full h-16 text-lg font-black shadow-2xl shadow-brand-500/30 group disabled:opacity-70"
+          >
+            {saving ? (
+              <RefreshCw className="w-6 h-6 animate-spin" />
+            ) : (
+              <>
+                SALVAR E PRÓXIMO <ChevronRight className="w-6 h-6 ml-2 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
           </button>
-          <button onClick={handleNext} className="btn-primary w-full h-14 text-base font-bold shadow-lg shadow-brand-500/20">
-             Próximo Lead <ChevronRight className="w-5 h-5 ml-1" />
+          <button onClick={() => setCurrentIndex(prev => prev + 1)} className="w-full text-surface-500 hover:text-surface-300 text-xs font-medium py-4 transition-colors">
+             Pular este lead por enquanto
           </button>
         </div>
       </div>

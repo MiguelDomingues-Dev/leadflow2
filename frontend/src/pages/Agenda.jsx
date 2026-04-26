@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { CalendarClock, RefreshCw, Phone, ChevronRight } from 'lucide-react'
-import { getLeads, getStatuses } from '../api/client'
+import { CalendarClock, RefreshCw, Phone, ChevronRight, Link2 } from 'lucide-react'
+import { getLeads, getStatuses, generateTrackedLink } from '../api/client'
+import toast from 'react-hot-toast'
+import { formatForDisplay, isToday, isOverdue } from '../utils/date'
 import { useNavigate } from 'react-router-dom'
 
 export default function Agenda() {
@@ -13,7 +15,7 @@ export default function Agenda() {
     const load = async () => {
       setLoading(true)
       try {
-        const [l, s] = await Promise.all([getLeads({}), getStatuses()])
+        const [l, s] = await Promise.all([getLeads({ per_page: 1000 }), getStatuses()])
         const hoje = new Date(); hoje.setHours(0,0,0,0)
         const comAgenda = l.data
           .filter(lead => lead.next_contact)
@@ -27,14 +29,10 @@ export default function Agenda() {
 
   const getStatusObj = id => statuses.find(s => String(s.id) === String(id))
 
-  const hoje = new Date(); hoje.setHours(0,0,0,0)
-  const isAtrasado = d => { const dt = new Date(d + 'T12:00:00'); return dt < hoje }
-  const isHoje     = d => { const dt = new Date(d + 'T12:00:00'); return dt.toDateString() === hoje.toDateString() }
-
   const sections = [
-    { label:'⚠️ Atrasados', items: leads.filter(l => isAtrasado(l.next_contact)), color:'text-red-400' },
-    { label:'📅 Hoje',       items: leads.filter(l => isHoje(l.next_contact)),     color:'text-amber-400' },
-    { label:'📆 Próximos',   items: leads.filter(l => !isAtrasado(l.next_contact) && !isHoje(l.next_contact)), color:'text-surface-300' },
+    { label:'⚠️ Atrasados', items: leads.filter(l => isOverdue(l.next_contact)), color:'text-red-400' },
+    { label:'📅 Hoje',       items: leads.filter(l => isToday(l.next_contact)),     color:'text-amber-400' },
+    { label:'📆 Próximos',   items: leads.filter(l => !isOverdue(l.next_contact) && !isToday(l.next_contact)), color:'text-surface-300' },
   ]
 
   const pendingLeads = sections[0].items.length + sections[1].items.length
@@ -46,14 +44,12 @@ export default function Agenda() {
           <h1 className="text-2xl font-bold">Próximos Contatos</h1>
           <p className="text-surface-500 text-sm mt-1">Agenda de follow-up dos seus leads</p>
         </div>
-        {pendingLeads > 0 && (
-          <button onClick={() => navigate('/foco')} className="btn-primary py-2.5 shadow-lg shadow-brand-500/20 group">
-            <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              Modo Foco ({pendingLeads})
-            </span>
-          </button>
-        )}
+        <button onClick={() => navigate('/foco')} className="btn-primary py-3 px-6 shadow-xl shadow-brand-500/30 group">
+          <span className="flex items-center gap-2 text-base font-black">
+            <span className={`w-2.5 h-2.5 rounded-full ${pendingLeads > 0 ? 'bg-white animate-pulse' : 'bg-surface-400'}`} />
+            ENTRAR NO MODO WAR ROOM ({pendingLeads})
+          </span>
+        </button>
       </div>
 
       {loading ? <div className="flex justify-center py-20"><RefreshCw className="w-5 h-5 text-brand-500 animate-spin" /></div>
@@ -79,8 +75,8 @@ export default function Agenda() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold text-surface-100 text-sm truncate">{l.name}</p>
-                        <p className={`md:hidden text-xs font-semibold ${isAtrasado(l.next_contact) ? 'text-red-400' : isHoje(l.next_contact) ? 'text-amber-400' : 'text-surface-300'}`}>
-                          {new Date(l.next_contact + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        <p className={`md:hidden text-xs font-semibold ${isOverdue(l.next_contact) ? 'text-red-400' : isToday(l.next_contact) ? 'text-amber-400' : 'text-surface-300'}`}>
+                          {formatForDisplay(l.next_contact)}
                         </p>
                       </div>
                       <div className="flex items-center gap-3 mt-1.5">
@@ -88,11 +84,24 @@ export default function Agenda() {
                           <Phone className="w-3.5 h-3.5" /> {l.phone}
                         </a>
                         {st && <span className="text-[10px] font-medium px-2 py-0.5 rounded-md" style={{ color: st.color, backgroundColor: st.color + '18' }}>{st.name}</span>}
+                        {l.specific_video && (
+                          <button onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await generateTrackedLink({ lead_id: l.id, url: l.specific_video });
+                              const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
+                              navigator.clipboard.writeText(fullUrl);
+                              toast.success('Link rastreável copiado!');
+                            } catch (err) {}
+                          }} className="w-6 h-6 rounded-md bg-brand-500/10 hover:bg-brand-500/20 flex items-center justify-center text-brand-400 transition-all ml-1" title="Copiar link rastreável">
+                            <Link2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="hidden md:block text-right flex-shrink-0">
-                      <p className={`text-sm font-semibold ${isAtrasado(l.next_contact) ? 'text-red-400' : isHoje(l.next_contact) ? 'text-amber-400' : 'text-surface-300'}`}>
-                        {new Date(l.next_contact + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      <p className={`text-sm font-semibold ${isOverdue(l.next_contact) ? 'text-red-400' : isToday(l.next_contact) ? 'text-amber-400' : 'text-surface-300'}`}>
+                        {formatForDisplay(l.next_contact)}
                       </p>
                       <p className="text-surface-500 text-[10px] mt-0.5">{l.platform_icon} {l.platform_name}</p>
                     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, Plus, Trash2, Edit2, RefreshCw, Users, Download, MessageCircle, ChevronLeft, ChevronRight, X, Phone, Mail } from 'lucide-react'
-import { getLeads, getPlatforms, getVendors, getStatuses, deleteLead, updateLead, bulkActionLeads } from '../api/client'
+import { Search, Plus, Trash2, Edit2, RefreshCw, Users, Download, MessageCircle, ChevronLeft, ChevronRight, X, Phone, Mail, Link2 } from 'lucide-react'
+import { getLeads, getPlatforms, getVendors, getStatuses, deleteLead, updateLead, bulkActionLeads, generateTrackedLink } from '../api/client'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
@@ -330,6 +330,19 @@ export default function Leads() {
                           title="Abrir WhatsApp">
                           <MessageCircle className="w-3.5 h-3.5" />
                         </a>
+                        {/* Link Tracker */}
+                        {l.specific_video && (
+                          <button onClick={async () => {
+                            try {
+                              const res = await generateTrackedLink({ lead_id: l.id, url: l.specific_video });
+                              const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
+                              navigator.clipboard.writeText(fullUrl);
+                              toast.success('Link rastreável copiado!');
+                            } catch (err) {}
+                          }} className="w-8 h-8 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 flex items-center justify-center text-brand-400 transition-all" title="Gerar link rastreável">
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {/* Editar */}
                         <Link to={`/leads/${l.id}/edit`}
                           className="w-8 h-8 rounded-lg bg-surface-800 hover:bg-surface-700 flex items-center justify-center text-surface-400 hover:text-surface-100 transition-all">
@@ -396,6 +409,18 @@ export default function Leads() {
                       className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500/20 flex items-center justify-center text-green-400 transition-all">
                       <MessageCircle className="w-4 h-4" />
                     </a>
+                    {l.specific_video && (
+                      <button onClick={async () => {
+                        try {
+                          const res = await generateTrackedLink({ lead_id: l.id, url: l.specific_video });
+                          const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
+                          navigator.clipboard.writeText(fullUrl);
+                          toast.success('Link rastreável copiado!');
+                        } catch (err) {}
+                      }} className="w-8 h-8 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 flex items-center justify-center text-brand-400 transition-all">
+                        <Link2 className="w-4 h-4" />
+                      </button>
+                    )}
                     <Link to={`/leads/${l.id}/edit`}
                       className="w-8 h-8 rounded-lg bg-surface-800 hover:bg-surface-700 flex items-center justify-center text-surface-400">
                       <Edit2 className="w-4 h-4" />

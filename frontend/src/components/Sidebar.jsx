@@ -47,7 +47,7 @@ export default function Sidebar() {
   const handleLogout = async () => { try { await logout() } catch {} signout(); navigate('/login'); toast.success('Até logo!') }
   const isActive = to => to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to)
   return (
-    <aside className="hidden md:flex w-60 min-h-screen bg-surface-900 border-r border-surface-800 flex-col flex-shrink-0">
+    <aside className="hidden md:flex w-64 h-full bg-surface-900 border-r border-surface-800 flex-col flex-shrink-0">
       <div className="p-5 border-b border-surface-800">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-brand-600 flex items-center justify-center shadow-md shadow-brand-600/25"><Zap className="w-4 h-4 text-white" /></div>

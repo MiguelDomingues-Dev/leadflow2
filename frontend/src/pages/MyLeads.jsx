@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Search, RefreshCw, ChevronRight, MessageSquare, Phone, Calendar, ArrowUpRight, ArrowLeft, Mic, Square, Trash2 } from 'lucide-react'
-import { getLeads, getLead, updateLead, addActivity, getStatuses, getPlatforms, addAudioActivity } from '../api/client'
+import { Search, RefreshCw, ChevronRight, MessageSquare, Phone, Calendar, ArrowUpRight, ArrowLeft, Mic, Square, Trash2, Link2 } from 'lucide-react'
+import { getLeads, getLead, updateLead, addActivity, getStatuses, getPlatforms, addAudioActivity, generateTrackedLink } from '../api/client'
 import toast from 'react-hot-toast'
+import { formatForDisplay, formatForInput } from '../utils/date'
 
 const FOLLOW = { menos_1_mes:'< 1 mês', '1_3_meses':'1–3 meses', '3_6_meses':'3–6 meses', mais_6_meses:'> 6 meses', nao_acompanha:'Não acompanha' }
 const ACT_ICONS = { note:'💬', contact:'📞', status_change:'🔄', created:'✨', audio:'🎙️' }
@@ -67,7 +68,14 @@ export default function MyLeads() {
 
   const openDetail = async (id) => {
     setSelected(id); setDetail(null); setLoadingDetail(true)
-    try { const r = await getLead(id); setDetail(r.data); setEditStatus(String(r.data.status_id || '')) } catch {}
+    try { 
+      const r = await getLead(id); 
+      const data = r.data
+      // Format date to YYYY-MM-DD for the input
+      data.next_contact = formatForInput(data.next_contact)
+      setDetail(data); 
+      setEditStatus(String(data.status_id || '')) 
+    } catch {}
     setLoadingDetail(false)
   }
 
@@ -84,10 +92,13 @@ export default function MyLeads() {
 
   const handleNextContact = async (date) => {
     if (!detail) return
+    const newDate = date || null
     try {
-      await updateLead(detail.id, { ...detail, next_contact: date })
+      await updateLead(detail.id, { ...detail, next_contact: newDate })
       toast.success('Próximo contato agendado')
-      const r = await getLead(detail.id); setDetail(r.data)
+      const r = await getLead(detail.id); 
+      setDetail(r.data)
+      load() // Refresh the list to reflect changes in Agenda/List
     } catch {}
   }
 
@@ -269,7 +280,7 @@ export default function MyLeads() {
                         {l.next_contact && (
                           <div className="mt-2 text-[10px] font-medium text-amber-400 flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {new Date(l.next_contact + 'T12:00:00').toLocaleDateString('pt-BR')}
+                            {formatForDisplay(l.next_contact)}
                           </div>
                         )}
                       </div>
@@ -344,7 +355,8 @@ export default function MyLeads() {
                 </div>
                 {l.next_contact && (
                   <div className="flex items-center gap-1 mt-2.5 text-xs text-amber-400 font-medium">
-                    <Calendar className="w-3 h-3" /> {new Date(l.next_contact + 'T12:00:00').toLocaleDateString('pt-BR')}
+                    <Calendar className="w-3 h-3" /> 
+                    {formatForDisplay(l.next_contact)}
                   </div>
                 )}
               </button>
@@ -404,7 +416,22 @@ export default function MyLeads() {
                 {detail.specific_video && (
                   <div className="col-span-2">
                     <p className="text-surface-500 text-xs mb-1">Vídeo que assistiu</p>
-                    <p className="text-surface-200 text-sm">🎬 {detail.specific_video}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-surface-200 text-sm flex-1">🎬 {detail.specific_video}</p>
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const res = await generateTrackedLink({ lead_id: detail.id, url: detail.specific_video });
+                            const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
+                            navigator.clipboard.writeText(fullUrl);
+                            toast.success('Link rastreável copiado!');
+                          } catch (err) {}
+                        }}
+                        className="px-2 py-1 rounded-md bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 text-[10px] font-bold border border-brand-500/20 transition-all flex items-center gap-1"
+                      >
+                        <Link2 className="w-3 h-3" /> GERAR TRACKER
+                      </button>
+                    </div>
                   </div>
                 )}
                 {detail.interest && (
@@ -435,7 +462,9 @@ export default function MyLeads() {
               </div>
               <div>
                 <p className="label">Próximo contato</p>
-                <input type="date" defaultValue={detail.next_contact || ''}
+                <input type="date" 
+                  value={detail.next_contact || ''}
+                  onChange={e => setDetail({ ...detail, next_contact: e.target.value })}
                   onBlur={e => handleNextContact(e.target.value || null)}
                   className="input w-48" />
               </div>

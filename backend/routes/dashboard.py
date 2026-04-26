@@ -65,7 +65,7 @@ def get_dashboard():
 
     # próximos contatos agendados
     proximos = query(f"""
-        SELECT l.id, l.name, l.phone, l.next_contact, s.name AS status_name, s.color AS status_color
+        SELECT l.id, l.name, l.phone, DATE_FORMAT(l.next_contact, '%%Y-%%m-%%d') as next_contact, s.name AS status_name, s.color AS status_color
         FROM leads l LEFT JOIN lead_statuses s ON l.status_id=s.id
         WHERE l.next_contact IS NOT NULL AND l.next_contact >= CURDATE(){vendor_filter}
         ORDER BY l.next_contact ASC LIMIT 10

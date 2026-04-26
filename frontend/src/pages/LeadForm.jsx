@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { Save, ArrowLeft, Zap, CheckCircle } from 'lucide-react'
-import { getLead, createLead, updateLead, getPlatforms, getVendors, getStatuses } from '../api/client'
+import { Save, ArrowLeft, Zap, CheckCircle, Link2, Copy, Check, ExternalLink } from 'lucide-react'
+import { getLead, createLead, updateLead, getPlatforms, getVendors, getStatuses, generateTrackedLink } from '../api/client'
 import toast from 'react-hot-toast'
 import { Toaster } from 'react-hot-toast'
+import { formatForInput } from '../utils/date'
 
 const FOLLOW_OPTIONS = [
   { value:'nao_acompanha', label:'Não acompanha' },
@@ -32,7 +33,9 @@ export function LeadForm() {
       setPlatforms(p.data); setVendors(v.data); setStatuses(s.data)
       if (isEdit) {
         const l = await getLead(id)
-        setForm({ ...BLANK, ...l.data, status_id: String(l.data.status_id || '') })
+        const data = l.data
+        data.next_contact = formatForInput(data.next_contact)
+        setForm({ ...BLANK, ...data, status_id: String(data.status_id || '') })
       }
     }
     load()
@@ -67,7 +70,7 @@ export function LeadForm() {
         </div>
       </div>
       <FormBody form={form} set={set} setForm={setForm} platforms={platforms} vendors={vendors} statuses={statuses}
-        saving={saving} onSubmit={handleSubmit} isEdit={isEdit} showVendor={true} showStatus={isEdit} />
+        saving={saving} onSubmit={handleSubmit} isEdit={isEdit} showVendor={true} showStatus={isEdit} leadId={id} />
     </div>
   )
 }
@@ -141,7 +144,30 @@ export function Collector() {
 }
 
 // ── Shared form body ──────────────────────────────────────────
-function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, onSubmit, isEdit, showVendor, showStatus, submitLabel }) {
+function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, onSubmit, isEdit, showVendor, showStatus, submitLabel, leadId }) {
+  const [generating, setGenerating] = useState(false)
+  const [trackedLink, setTrackedLink] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const handleGenerateLink = async () => {
+    if (!form.specific_video) return toast.error('Insira o link do vídeo primeiro')
+    setGenerating(true)
+    try {
+      const res = await generateTrackedLink({ lead_id: leadId, url: form.specific_video })
+      // Use the current origin + the tracked path from backend
+      const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`
+      setTrackedLink(fullUrl)
+      toast.success('Link rastreável gerado!')
+    } catch {}
+    setGenerating(false)
+  }
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(trackedLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {/* Cliente */}
@@ -180,7 +206,31 @@ function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, on
         </div>
         <div>
           <label className="label">Vídeo específico que assistiu?</label>
-          <input value={form.specific_video || ''} onChange={set('specific_video')} placeholder="Ex: 'Como organizar estoque' ou link do vídeo" className="input" />
+          <div className="flex gap-2">
+            <input value={form.specific_video || ''} onChange={set('specific_video')} placeholder="Ex: 'Como organizar estoque' ou link do vídeo" className="input" />
+            {isEdit && (
+              <button type="button" onClick={handleGenerateLink} disabled={generating}
+                className="btn-secondary px-3" title="Gerar link rastreável">
+                <Link2 className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
+          {trackedLink && (
+            <div className="mt-2 p-3 bg-brand-500/10 border border-brand-500/20 rounded-xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider mb-1">Link Rastreável Gerado</p>
+                <p className="text-xs text-surface-200 truncate font-mono">{trackedLink}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <a href={trackedLink} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-brand-500/20 rounded-lg text-brand-400 transition-colors">
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button type="button" onClick={copyToClipboard} className="p-2 hover:bg-brand-500/20 rounded-lg text-brand-400 transition-colors">
+                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div>
           <label className="label">Há quanto tempo acompanha?</label>

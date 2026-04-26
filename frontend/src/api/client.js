@@ -55,4 +55,5 @@ export const deleteStatus = id => api.delete('/statuses/' + id)
 export const getDashboard = () => api.get('/dashboard/')
 export const getTopVideos = () => api.get('/dashboard/top-videos')
 export const updateLeadStatus = (leadId, statusId) => api.put('/leads/' + leadId, { status_id: statusId })
+export const generateTrackedLink = d => api.post('/links/generate', d)
 export default api

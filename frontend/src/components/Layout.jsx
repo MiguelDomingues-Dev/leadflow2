@@ -22,9 +22,9 @@ export function VendorRoute() {
 
 export default function Layout() {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-auto bottom-nav-safe">
+      <main className="flex-1 h-full overflow-y-auto bottom-nav-safe bg-surface-950">
         <div className="p-4 md:p-7 max-w-7xl mx-auto"><Outlet /></div>
       </main>
       <BottomNav />

@@ -36,7 +36,8 @@ def _lead_select():
     return """
         SELECT l.*, p.name AS platform_name, p.color AS platform_color, p.icon AS platform_icon,
                v.name AS vendor_name, s.name AS status_name, s.color AS status_color,
-               u.name AS vendor_user_name
+               u.name AS vendor_user_name,
+               DATE_FORMAT(l.next_contact, '%%Y-%%m-%%d') as next_contact
         FROM leads l
         LEFT JOIN platforms p ON l.platform_id = p.id
         LEFT JOIN vendors v ON l.vendor_id = v.id
@@ -101,7 +102,8 @@ def export_leads():
 def get_lead(lid):
     row = query("""
         SELECT l.*, p.name AS platform_name, p.color AS platform_color, p.icon AS platform_icon,
-               v.name AS vendor_name, s.name AS status_name, s.color AS status_color
+               v.name AS vendor_name, s.name AS status_name, s.color AS status_color,
+               DATE_FORMAT(l.next_contact, '%%Y-%%m-%%d') as next_contact
         FROM leads l
         LEFT JOIN platforms p ON l.platform_id=p.id
         LEFT JOIN vendors v ON l.vendor_id=v.id

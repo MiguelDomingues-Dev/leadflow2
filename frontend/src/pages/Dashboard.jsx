@@ -3,6 +3,7 @@ import { Users, TrendingUp, Target, RefreshCw, Trophy, Video, CalendarClock, Pho
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { getDashboard, getTopVideos } from '../api/client'
 import { Link as RouterLink } from 'react-router-dom'
+import { formatForDisplay, isToday, isOverdue } from '../utils/date'
 
 const fmt = n => new Intl.NumberFormat('pt-BR').format(n ?? 0)
 const pct = (a, b) => b ? (((a ?? 0) / b) * 100).toFixed(1) + '%' : '0%'
@@ -316,14 +317,12 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {(proximos_contatos || []).slice(0, 6).map(c => {
-              const date = new Date(c.next_contact + 'T12:00:00')
-              const today = new Date(); today.setHours(0,0,0,0)
-              const isOverdue = date < today
-              const isToday = date.toDateString() === today.toDateString()
+              const overdue = isOverdue(c.next_contact)
+              const today = isToday(c.next_contact)
               return (
-                <div key={c.id} className={`flex items-start gap-3 p-3 rounded-xl border ${isOverdue ? 'border-red-500/20 bg-red-500/5' : isToday ? 'border-amber-500/20 bg-amber-500/5' : 'border-surface-800 bg-surface-800/30'}`}>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isOverdue ? 'bg-red-500/10' : isToday ? 'bg-amber-500/10' : 'bg-surface-700'}`}>
-                    {isOverdue ? <AlertCircle className="w-4 h-4 text-red-400" /> : <CalendarClock className="w-4 h-4 text-amber-400" />}
+                <div key={c.id} className={`flex items-start gap-3 p-3 rounded-xl border ${overdue ? 'border-red-500/20 bg-red-500/5' : today ? 'border-amber-500/20 bg-amber-500/5' : 'border-surface-800 bg-surface-800/30'}`}>
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${overdue ? 'bg-red-500/10' : today ? 'bg-amber-500/10' : 'bg-surface-700'}`}>
+                    {overdue ? <AlertCircle className="w-4 h-4 text-red-400" /> : <CalendarClock className="w-4 h-4 text-amber-400" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-surface-100 text-sm font-medium truncate">{c.name}</p>
@@ -331,9 +330,9 @@ export default function Dashboard() {
                       <Phone className="w-3 h-3" />{c.phone}
                     </p>
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className={`text-xs font-semibold ${isOverdue ? 'text-red-400' : isToday ? 'text-amber-400' : 'text-surface-400'}`}>
-                        {isOverdue ? '⚠️ Atrasado · ' : isToday ? '📅 Hoje · ' : ''}
-                        {date.toLocaleDateString('pt-BR')}
+                      <span className={`text-xs font-semibold ${overdue ? 'text-red-400' : today ? 'text-amber-400' : 'text-surface-400'}`}>
+                        {overdue ? '⚠️ Atrasado · ' : today ? '📅 Hoje · ' : ''}
+                        {formatForDisplay(c.next_contact)}
                       </span>
                       {c.status_name && (
                         <span className="text-xs font-medium px-1.5 py-0.5 rounded-md" style={{ backgroundColor: (c.status_color || '#64748b') + '20', color: c.status_color || '#94a3b8' }}>

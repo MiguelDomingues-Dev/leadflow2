@@ -1,6 +1,8 @@
 # ── Segredos — nunca sobem ──────────────────────
 backend/.env
+backend/.env.example
 frontend/.env
+frontend/.env.example
 
 # ── Dependências — recriadas localmente ─────────
 frontend/node_modules/
@@ -42,6 +44,7 @@ frontend/.pnp.*
 
 # Environment (importante para não subir senhas!)
 backend/.env
+backend/.env.example
 .env.local
 *.env
 
