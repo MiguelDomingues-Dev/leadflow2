@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, Phone, MessageSquare, ChevronRight, RefreshCw, ArrowLeft, Target, Clock, Save, Link2 } from 'lucide-react'
+import { CheckCircle, Phone, MessageSquare, ChevronRight, RefreshCw, ArrowLeft, Target, Clock, Save } from 'lucide-react'
 import { getLeads, getStatuses, updateLead, addActivity } from '../api/client'
 import toast from 'react-hot-toast'
 import { formatForDisplay, isToday, isOverdue, parseSafe } from '../utils/date'
@@ -170,27 +170,6 @@ export default function FocusMode() {
               className="input bg-surface-800 border-surface-700 text-sm min-h-[100px] resize-none focus:ring-brand-500/20"
             />
           </div>
-
-          {lead.specific_video && (
-            <div className="pt-2">
-               <button 
-                onClick={async () => {
-                  try {
-                    const { generateTrackedLink } = await import('../api/client');
-                    const res = await generateTrackedLink({ lead_id: lead.id, url: lead.specific_video });
-                    const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
-                    navigator.clipboard.writeText(fullUrl);
-                    toast.success('Link rastreável copiado!');
-                  } catch (err) {
-                    toast.error('Erro ao gerar link');
-                  }
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-brand-500/30 bg-brand-500/5 text-brand-400 text-xs font-bold hover:bg-brand-500/10 transition-all"
-               >
-                 <Link2 className="w-3.5 h-3.5" /> GERAR E COPIAR LINK RASTREÁVEL
-               </button>
-            </div>
-          )}
         </div>
 
         <div className="pt-2">

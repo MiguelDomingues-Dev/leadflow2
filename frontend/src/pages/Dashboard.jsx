@@ -4,6 +4,9 @@ import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Cart
 import { getDashboard, getTopVideos } from '../api/client'
 import { Link as RouterLink } from 'react-router-dom'
 import { formatForDisplay, isToday, isOverdue } from '../utils/date'
+import SDRDashboard from './SDRDashboard'
+import CloserDashboard from './CloserDashboard'
+import { useAuth } from '../context/AuthContext'
 
 const fmt = n => new Intl.NumberFormat('pt-BR').format(n ?? 0)
 const pct = (a, b) => b ? (((a ?? 0) / b) * 100).toFixed(1) + '%' : '0%'
@@ -24,7 +27,7 @@ export default function Dashboard() {
   const [data, setData]       = useState(null)
   const [videos, setVideos]   = useState([])
   const [loading, setLoading] = useState(true)
-
+  const { user, isAdmin }     = useAuth()
   const load = async () => {
     setLoading(true)
     try {
@@ -37,7 +40,11 @@ export default function Dashboard() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="w-6 h-6 text-brand-500 animate-spin" /></div>
 
-  const { totais, funil, por_plataforma, por_vendedor, serie_14d, follow_time, proximos_contatos } = data || {}
+  if (user?.role === 'sdr') return <SDRDashboard data={data} load={load} loading={loading} />
+  if (user?.role === 'vendor') return <CloserDashboard data={data} load={load} loading={loading} />
+
+  // Admin View (Current Dashboard)
+  const { totais, funil, por_plataforma, ranking_sdr, ranking_closer, serie_14d, follow_time, proximos_contatos } = data || {}
 
   const funilData = (funil || []).map(f => ({
     label: f.name,
@@ -97,12 +104,12 @@ export default function Dashboard() {
               <p className="text-xl font-bold text-brand-400 text-center">{fmt(totais?.mes_convertidos || 0)}</p>
             </div>
             <div className="p-3 rounded-2xl bg-surface-800/40 border border-surface-800">
-              <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1 font-semibold text-center">Meta</p>
-              <p className="text-xl font-bold text-surface-100 text-center">{fmt(totais?.goal || 50)}</p>
+              <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1 font-semibold text-center">Meta SDR</p>
+              <p className="text-xl font-bold text-surface-100 text-center">{fmt(totais?.sdr_goal || 100)}</p>
             </div>
             <div className="p-3 rounded-2xl bg-brand-500/10 border border-brand-500/20">
-              <p className="text-[10px] uppercase tracking-wider text-brand-400 mb-1 font-semibold text-center">Faltam</p>
-              <p className="text-xl font-bold text-surface-100 text-center">{fmt(Math.max(0, (totais?.goal || 50) - (totais?.mes_convertidos || 0)))}</p>
+              <p className="text-[10px] uppercase tracking-wider text-brand-400 mb-1 font-semibold text-center">Meta Closer</p>
+              <p className="text-xl font-bold text-surface-100 text-center">{fmt(totais?.closer_goal || 30)}</p>
             </div>
           </div>
         </div>
@@ -116,8 +123,8 @@ export default function Dashboard() {
                strokeLinecap="round" className="text-brand-500 transition-all duration-1000" />
            </svg>
            <div className="absolute inset-0 flex flex-col items-center justify-center">
-             <p className="text-3xl font-bold text-surface-100">{Math.round(((totais?.mes_convertidos || 0) / (totais?.goal || 1)) * 100)}%</p>
-             <p className="text-[10px] text-surface-500 uppercase font-semibold">Concluído</p>
+            <p className="text-3xl font-bold text-surface-100">{Math.round(((totais?.mes_convertidos || 0) / (totais?.closer_goal || 1)) * 100)}%</p>
+            <p className="text-[10px] text-surface-500 uppercase font-semibold">Vendas</p>
            </div>
         </div>
       </div>
@@ -127,9 +134,10 @@ export default function Dashboard() {
         {[
           { label:'Total de Leads', value: fmt(totais?.total), icon: Users, sub:'Todos os registros', color:'text-brand-400 bg-brand-500/10' },
           { label:'Leads Hoje', value: fmt(totais?.hoje), icon: TrendingUp, sub:'Registrados hoje', color:'text-blue-400 bg-blue-500/10' },
-          { label:'Últimos 7 dias', value: fmt(totais?.semana), icon: Target, sub:'Esta semana', color:'text-amber-400 bg-amber-500/10' },
-          { label:'Convertidos', value: fmt(convertidoN), icon: Trophy, sub: pct(convertidoN, totais?.total)+' de conversão', color:'text-green-400 bg-green-500/10' },
-        ].map(({ label, value, icon: Icon, sub, color }) => (
+          { label:'Convertidos (Mês)', value: fmt(totais?.mes_convertidos), icon: Trophy, sub:'Conversões recentes', color:'text-green-400 bg-green-500/10' },
+          { label:'Receita (Mês)', value: 'R$ ' + (parseFloat(totais?.receita_mes) || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2}), icon: Target, sub:'Faturamento recente', color:'text-emerald-400 bg-emerald-500/10', adminOnly: true },
+          { label:'Receita Total', value: 'R$ ' + (parseFloat(totais?.receita_total) || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2}), icon: Target, sub:'Faturamento histórico', color:'text-blue-400 bg-blue-500/10', adminOnly: true },
+        ].filter(s => !s.adminOnly || isAdmin).map(({ label, value, icon: Icon, sub, color }) => (
           <div key={label} className="stat-card">
             <div className="flex items-start justify-between">
               <p className="text-surface-400 text-sm">{label}</p>
@@ -235,33 +243,57 @@ export default function Dashboard() {
 
       {/* Bottom row: vendedores + tempo de acompanhamento + vídeos */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Pódio de Vendedores */}
+        {/* Pódio de SDRs */}
         <div className="card p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Trophy className="w-5 h-5 text-amber-400" />
-            <h2 className="font-semibold text-surface-100">Ranking de Vendas</h2>
+            <TrendingUp className="w-5 h-5 text-brand-400" />
+            <h2 className="font-semibold text-surface-100">Ranking SDR (Qualificação)</h2>
           </div>
           <div className="space-y-4">
-            {(por_vendedor || []).length === 0
+            {(ranking_sdr || []).length === 0
               ? <p className="text-surface-500 text-sm text-center py-4">Sem dados</p>
-              : [...por_vendedor].sort((a,b) => (b.convertidos || 0) - (a.convertidos || 0)).map((v, i) => {
-              const rankColor = i === 0 ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' : i === 1 ? 'text-slate-300 bg-slate-300/10 border-slate-300/30' : i === 2 ? 'text-amber-600 bg-amber-600/10 border-amber-600/30' : 'text-surface-400 bg-surface-800 border-surface-700';
-              return (
+              : ranking_sdr.map((v, i) => (
                 <div key={v.name} className="flex items-center gap-4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border ${rankColor}`}>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border border-surface-700 text-surface-400">
                     {i + 1}º
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-surface-100 text-sm truncate">{v.name}</p>
-                    <p className="text-xs text-surface-500">{fmt(v.total)} leads recebidos</p>
+                    <p className="text-xs text-surface-500">{fmt(v.total)} leads captados</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-green-400 text-lg leading-none">{fmt(v.convertidos || 0)}</p>
-                    <p className="text-[10px] text-surface-500 font-bold uppercase tracking-wider mt-0.5">Vendas</p>
+                    <p className="font-black text-brand-400 text-lg leading-none">{fmt(v.qualificados || 0)}</p>
+                    <p className="text-[10px] text-surface-500 font-bold uppercase tracking-wider mt-0.5">Hot</p>
                   </div>
                 </div>
-              )
-            })}
+              ))}
+          </div>
+        </div>
+
+        {/* Pódio de Vendedores */}
+        <div className="card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Trophy className="w-5 h-5 text-amber-400" />
+            <h2 className="font-semibold text-surface-100">Ranking Closer (Vendas)</h2>
+          </div>
+          <div className="space-y-4">
+            {(ranking_closer || []).length === 0
+              ? <p className="text-surface-500 text-sm text-center py-4">Sem dados</p>
+              : ranking_closer.map((v, i) => (
+                <div key={v.name} className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border border-surface-700 text-surface-400">
+                    {i + 1}º
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-surface-100 text-sm truncate">{v.name}</p>
+                    <p className="text-xs text-surface-500">{fmt(v.total)} leads quentes</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black text-green-400 text-lg leading-none">{fmt(v.convertidos || 0)} <span className="text-xs text-green-500/50">Vendas</span></p>
+                    <p className="text-[11px] text-emerald-400 font-mono font-bold mt-1">R$ {parseFloat(v.receita || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
 

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Save, Target, ShieldCheck, RefreshCw } from 'lucide-react'
+import { Save, Target, ShieldCheck, RefreshCw, Zap, Users } from 'lucide-react'
 import { getSettings, updateSettings } from '../api/client'
 import toast from 'react-hot-toast'
 
 export default function Settings() {
-  const [settings, setSettings] = useState({ sales_goal: '50' })
+  const [settings, setSettings] = useState({ sdr_goal: '100', closer_goal: '30' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -43,26 +43,51 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Metas */}
+        {/* Meta SDR */}
+        <div className="card p-6 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-surface-100">Meta do SDR</h2>
+              <p className="text-xs text-surface-500">Leads qualificados por mês</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="label">Meta de Qualificações Mensal</p>
+              <input type="number" value={settings.sdr_goal} 
+                onChange={e => setSettings({ ...settings, sdr_goal: e.target.value })}
+                className="input" placeholder="Ex: 100" />
+              <p className="text-[10px] text-surface-600 mt-1.5 leading-relaxed">
+                Quantidade de leads que o SDR deve qualificar e enviar para os Closers por mês.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Meta Closer */}
         <div className="card p-6 space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
               <Target className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-surface-100">Metas de Vendas</h2>
-              <p className="text-xs text-surface-500">Defina os objetivos globais da equipe</p>
+              <h2 className="font-bold text-surface-100">Meta do Closer</h2>
+              <p className="text-xs text-surface-500">Conversões por mês</p>
             </div>
           </div>
 
           <div className="space-y-4">
             <div>
               <p className="label">Meta de Conversões Mensal</p>
-              <input type="number" value={settings.sales_goal} 
-                onChange={e => setSettings({ ...settings, sales_goal: e.target.value })}
-                className="input" placeholder="Ex: 50" />
+              <input type="number" value={settings.closer_goal} 
+                onChange={e => setSettings({ ...settings, closer_goal: e.target.value })}
+                className="input" placeholder="Ex: 30" />
               <p className="text-[10px] text-surface-600 mt-1.5 leading-relaxed">
-                Essa meta será usada para calcular o termômetro de progresso no Dashboard do Administrador.
+                Quantidade de leads que o Closer deve converter (fechar venda) por mês.
               </p>
             </div>
           </div>
@@ -88,6 +113,31 @@ export default function Settings() {
             <div>
               <p className="label">Tentativas de Login</p>
               <input type="number" disabled value="5" className="input" />
+            </div>
+          </div>
+        </div>
+
+        {/* Webhook Info */}
+        <div className="card p-6 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-surface-100">Integração Webhook</h2>
+              <p className="text-xs text-surface-500">URL para captura automática de leads</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="label">URL do Webhook</p>
+              <div className="input bg-surface-800/50 text-surface-400 text-xs font-mono break-all select-all cursor-text">
+                {window.location.origin.replace(/:\d+$/, ':4031')}/api/leads/webhook?token=MEUTOKENSECRETO123
+              </div>
+              <p className="text-[10px] text-surface-600 mt-1.5 leading-relaxed">
+                Envie um POST com JSON contendo: <code className="text-surface-400">name</code>, <code className="text-surface-400">phone</code>, e opcionalmente <code className="text-surface-400">platform_id</code>, <code className="text-surface-400">email</code>.
+              </p>
             </div>
           </div>
         </div>

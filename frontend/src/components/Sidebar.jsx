@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, BarChart3, Megaphone, UserCheck, ChevronRight, Zap, LogOut, Settings, Shield, Tag, ClipboardList, CalendarClock, PlusCircle, User, Menu } from 'lucide-react'
+import { LayoutDashboard, Users, BarChart3, Megaphone, UserCheck, ChevronRight, Zap, LogOut, Settings, Shield, Tag, ClipboardList, CalendarClock, PlusCircle, User, Menu, PackageSearch, FileText } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { logout, getLeads } from '../api/client'
 import toast from 'react-hot-toast'
@@ -12,6 +12,7 @@ const adminLinks = [
   { to:'/audit',      label:'Auditoria',       icon:ClipboardList },
   { divider:true, label:'Configurações' },
   { to:'/settings',   label:'Geral',           icon:Settings },
+  { to:'/produtos',   label:'Produtos',        icon:PackageSearch },
   { to:'/platforms',  label:'Plataformas',     icon:Megaphone },
   { to:'/statuses',   label:'Status dos Leads',icon:Tag },
   { to:'/vendors',    label:'Vendedores',      icon:UserCheck },
@@ -38,12 +39,23 @@ export default function Sidebar() {
     }
   }, [isAdmin, user])
 
-  const vendorLinks = [
-    { to:'/meus-leads', label:'Meus Leads',       icon:ClipboardList },
-    { to:'/novo-lead',  label:'Registrar Lead',   icon:PlusCircle },
-    { to:'/agenda',     label:'Próximos Contatos',icon:CalendarClock, badge: delayedCount },
+  const sdrLinks = [
+    { to:'/sdr-inbox',  label:'Entrada de Leads', icon:Zap },
+    { to:'/sdr-novo',   label:'Novo Lead',         icon:PlusCircle },
   ]
-  const links = isAdmin ? adminLinks : vendorLinks
+  const closerLinks = [
+    { to:'/meus-leads', label:'Leads Quentes',    icon:ClipboardList },
+    { to:'/agenda',     label:'Minha Agenda',     icon:CalendarClock, badge: delayedCount },
+  ]
+  const billingLinks = [
+    { to:'/faturamento', label:'Fila de Faturamento', icon:FileText },
+  ]
+
+  let links = []
+  if (isAdmin) links = adminLinks
+  else if (user?.role === 'sdr') links = sdrLinks
+  else if (user?.role === 'billing') links = billingLinks
+  else links = closerLinks
   const handleLogout = async () => { try { await logout() } catch {} signout(); navigate('/login'); toast.success('Até logo!') }
   const isActive = to => to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to)
   return (
@@ -51,7 +63,7 @@ export default function Sidebar() {
       <div className="p-5 border-b border-surface-800">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-brand-600 flex items-center justify-center shadow-md shadow-brand-600/25"><Zap className="w-4 h-4 text-white" /></div>
-          <div><p className="font-bold text-surface-100 text-sm leading-none">LeadFlow</p><p className="text-xs text-surface-500 mt-0.5">{isAdmin ? 'Painel Admin' : 'Portal Vendedor'}</p></div>
+          <div><p className="font-bold text-surface-100 text-sm leading-none">LeadFlow</p><p className="text-xs text-surface-500 mt-0.5">{isAdmin ? 'Painel Admin' : (user?.role === 'sdr' ? 'Portal SDR' : user?.role === 'billing' ? 'Faturamento' : 'Portal Vendedor')}</p></div>
         </div>
       </div>
       <nav className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
@@ -111,14 +123,29 @@ export function BottomNav() {
     { to: '/perfil', icon: User, label: 'Perfil' },
   ]
   
+  const sdrNav = [
+    { to: '/sdr-inbox', icon: Zap, label: 'Inbox' },
+    { to: '/sdr-novo', icon: PlusCircle, isFab: true },
+    { to: '/perfil', icon: User, label: 'Perfil' },
+  ]
+  
   const vendorNav = [
-    { to: '/meus-leads', icon: ClipboardList, label: 'Leads' },
+    { to: '/meus-leads', icon: ClipboardList, label: 'Quentes' },
     { to: '/agenda', icon: CalendarClock, label: 'Agenda', badge: delayedCount },
     { to: '/novo-lead', icon: PlusCircle, isFab: true },
     { to: '/perfil', icon: User, label: 'Perfil' },
   ]
+  
+  const billingNav = [
+    { to: '/faturamento', icon: FileText, label: 'Faturamento' },
+    { to: '/perfil', icon: User, label: 'Perfil' },
+  ]
 
-  const links = isAdmin ? adminNav : vendorNav
+  let links = []
+  if (isAdmin) links = adminNav
+  else if (user?.role === 'sdr') links = sdrNav
+  else if (user?.role === 'billing') links = billingNav
+  else links = vendorNav
   const isActive = to => to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to)
 
   return (

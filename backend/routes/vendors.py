@@ -7,7 +7,14 @@ vendors_bp = Blueprint('vendors', __name__)
 @vendors_bp.route('/', methods=['GET'])
 @login_required
 def list_vendors():
-    return jsonify(query("SELECT * FROM vendors WHERE active=1 ORDER BY name ASC"))
+    sql = """
+        SELECT v.*, u.role 
+        FROM vendors v
+        LEFT JOIN users u ON v.user_id = u.id
+        WHERE v.active=1 
+        ORDER BY v.name ASC
+    """
+    return jsonify(query(sql))
 
 @vendors_bp.route('/', methods=['POST'])
 @admin_required

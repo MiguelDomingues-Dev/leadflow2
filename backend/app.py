@@ -16,7 +16,8 @@ from routes.dashboard import dashboard_bp
 from routes.settings  import settings_bp
 from routes.audit     import audit_bp
 from routes.links     import links_bp
-
+from routes.products  import products_bp
+from routes.sales     import sales_bp
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
@@ -30,6 +31,8 @@ app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
 app.register_blueprint(settings_bp,  url_prefix='/api/settings')
 app.register_blueprint(audit_bp,     url_prefix='/api/audit')
 app.register_blueprint(links_bp,     url_prefix='/api/links')
+app.register_blueprint(products_bp,  url_prefix='/api/products')
+app.register_blueprint(sales_bp,     url_prefix='/api/sales')
 
 # Clean redirect route for tracked links
 from routes.links import redirect_link

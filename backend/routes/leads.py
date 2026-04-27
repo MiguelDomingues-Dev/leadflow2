@@ -10,18 +10,25 @@ def _build_filters(user):
     """Build WHERE clauses and params based on user role + request args."""
     where = []; params = []
 
-    # Vendor vê apenas seus leads
-    if user['role'] == 'vendor':
-        vendor = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (user['id'],), fetchone=True)
-        if vendor:
-            where.append("AND l.vendor_id=%s"); params.append(vendor['id'])
-        else:
-            return None, None  # No vendor found, return empty
+    # Vendor ou SDR vê apenas seus leads
+    if user['role'] in ('vendor', 'sdr'):
+        v_row = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (user['id'],), fetchone=True)
+        if not v_row:
+            return None, None
+        
+        if user['role'] == 'vendor':
+            where.append("AND l.vendor_id=%s"); params.append(v_row['id'])
+        else: # sdr
+            where.append("AND l.sdr_id=%s"); params.append(v_row['id'])
 
     if request.args.get('platform_id'):
         where.append("AND l.platform_id=%s"); params.append(request.args['platform_id'])
     if request.args.get('status_id'):
         where.append("AND l.status_id=%s"); params.append(request.args['status_id'])
+    if request.args.get('sdr_id'):
+        where.append("AND l.sdr_id=%s"); params.append(request.args['sdr_id'])
+    if request.args.get('vendor_id'):
+        where.append("AND l.vendor_id=%s"); params.append(request.args['vendor_id'])
     if request.args.get('search'):
         where.append("AND (l.name LIKE %s OR l.phone LIKE %s OR l.email LIKE %s)")
         s = f"%{request.args['search']}%"; params += [s, s, s]
@@ -34,13 +41,18 @@ def _build_filters(user):
 
 def _lead_select():
     return """
-        SELECT l.*, p.name AS platform_name, p.color AS platform_color, p.icon AS platform_icon,
+        SELECT l.id, l.name, l.phone, l.email, l.platform_id, l.vendor_id, l.sdr_id,
+               l.status_id, l.specific_video, l.follow_time, l.interest, l.notes,
+               l.created_at, l.updated_at,
+               DATE_FORMAT(l.next_contact, '%%Y-%%m-%%d') AS next_contact,
+               p.name AS platform_name, p.color AS platform_color, p.icon AS platform_icon,
                v.name AS vendor_name, s.name AS status_name, s.color AS status_color,
-               u.name AS vendor_user_name,
-               DATE_FORMAT(l.next_contact, '%%Y-%%m-%%d') as next_contact
+               sv.name AS sdr_name,
+               u.name AS vendor_user_name
         FROM leads l
         LEFT JOIN platforms p ON l.platform_id = p.id
         LEFT JOIN vendors v ON l.vendor_id = v.id
+        LEFT JOIN vendors sv ON l.sdr_id = sv.id
         LEFT JOIN lead_statuses s ON l.status_id = s.id
         LEFT JOIN users u ON v.user_id = u.id
         WHERE 1=1 """
@@ -101,21 +113,31 @@ def export_leads():
 @login_required
 def get_lead(lid):
     row = query("""
-        SELECT l.*, p.name AS platform_name, p.color AS platform_color, p.icon AS platform_icon,
+        SELECT l.id, l.name, l.phone, l.email, l.platform_id, l.vendor_id, l.sdr_id,
+               l.status_id, l.specific_video, l.follow_time, l.interest, l.notes,
+               l.created_at, l.updated_at,
+               DATE_FORMAT(l.next_contact, '%%Y-%%m-%%d') AS next_contact,
+               p.name AS platform_name, p.color AS platform_color, p.icon AS platform_icon,
                v.name AS vendor_name, s.name AS status_name, s.color AS status_color,
-               DATE_FORMAT(l.next_contact, '%%Y-%%m-%%d') as next_contact
+               sv.name AS sdr_name
         FROM leads l
         LEFT JOIN platforms p ON l.platform_id=p.id
         LEFT JOIN vendors v ON l.vendor_id=v.id
+        LEFT JOIN vendors sv ON l.sdr_id=sv.id
         LEFT JOIN lead_statuses s ON l.status_id=s.id
         WHERE l.id=%s
     """, (lid,), fetchone=True)
     if not row: return jsonify({'error': 'Lead nao encontrado'}), 404
 
-    # Vendor pode ver apenas seu próprio lead
-    if g.user['role'] == 'vendor':
-        vendor = query("SELECT id FROM vendors WHERE user_id=%s", (g.user['id'],), fetchone=True)
-        if not vendor or row['vendor_id'] != vendor['id']:
+    # Vendedor/SDR pode ver apenas seu próprio lead
+    if g.user['role'] in ('vendor', 'sdr'):
+        v_row = query("SELECT id FROM vendors WHERE user_id=%s", (g.user['id'],), fetchone=True)
+        if not v_row:
+            return jsonify({'error': 'Acesso negado'}), 403
+        
+        if g.user['role'] == 'vendor' and row['vendor_id'] != v_row['id']:
+            return jsonify({'error': 'Acesso negado'}), 403
+        if g.user['role'] == 'sdr' and row['sdr_id'] != v_row['id']:
             return jsonify({'error': 'Acesso negado'}), 403
 
     # Histórico de atividades
@@ -183,18 +205,23 @@ def create_lead():
     default_status = query("SELECT id FROM lead_statuses WHERE is_default=1 AND active=1 ORDER BY sort_order LIMIT 1", fetchone=True)
     status_id = d.get('status_id') or (default_status['id'] if default_status else None)
 
-    # Vendor só pode criar lead para si mesmo
+    # Atribuição automática se for SDR ou Vendor
+    sdr_id = d.get('sdr_id')
     vendor_id = d.get('vendor_id')
-    if g.user['role'] == 'vendor':
-        vendor = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (g.user['id'],), fetchone=True)
-        vendor_id = vendor['id'] if vendor else None
+    
+    if g.user['role'] == 'sdr':
+        v_row = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (g.user['id'],), fetchone=True)
+        sdr_id = v_row['id'] if v_row else None
+    elif g.user['role'] == 'vendor':
+        v_row = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (g.user['id'],), fetchone=True)
+        vendor_id = v_row['id'] if v_row else None
 
     lid = execute("""
-        INSERT INTO leads (name,phone,email,platform_id,vendor_id,status_id,
+        INSERT INTO leads (name,phone,email,platform_id,sdr_id,vendor_id,status_id,
             specific_video,follow_time,interest,notes,next_contact)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """, (d['name'].strip(), d['phone'].strip(), (d.get('email','').strip() or None),
-          d['platform_id'], vendor_id, status_id,
+          d['platform_id'], sdr_id, vendor_id, status_id,
           d.get('specific_video','').strip() or None,
           d.get('follow_time','nao_acompanha'),
           d.get('interest','').strip() or None,
@@ -215,22 +242,31 @@ def update_lead(lid):
 
     old_status = row['status_id']
     new_status = d.get('status_id', old_status)
+    old_vendor = row['vendor_id']
+    new_vendor = d.get('vendor_id', old_vendor)
 
     execute("""
-        UPDATE leads SET name=%s,phone=%s,email=%s,platform_id=%s,vendor_id=%s,
+        UPDATE leads SET name=%s,phone=%s,email=%s,platform_id=%s,sdr_id=%s,vendor_id=%s,
             status_id=%s,specific_video=%s,follow_time=%s,interest=%s,notes=%s,
             next_contact=%s,updated_at=NOW()
         WHERE id=%s
     """, (d.get('name', row['name']), d.get('phone', row['phone']),
           (d.get('email','') or '').strip() or None,
           d.get('platform_id', row['platform_id']),
-          d.get('vendor_id', row['vendor_id']),
+          d.get('sdr_id', row['sdr_id']),
+          new_vendor,
           new_status,
           d.get('specific_video', row.get('specific_video','')),
           d.get('follow_time', row['follow_time']),
           d.get('interest', row.get('interest','')),
           d.get('notes', row.get('notes','')),
           d.get('next_contact') or None, lid))
+
+    if str(old_vendor) != str(new_vendor) and new_vendor:
+        v_name = query("SELECT name FROM vendors WHERE id=%s", (new_vendor,), fetchone=True)
+        content = f"Lead enviado para o vendedor: {v_name['name'] if v_name else '?'}"
+        execute("INSERT INTO lead_activities (lead_id,user_id,type,content) VALUES (%s,%s,'transfer',%s)",
+                (lid, g.user['id'], content))
 
     if str(old_status) != str(new_status):
         old_s = query("SELECT name FROM lead_statuses WHERE id=%s", (old_status,), fetchone=True)
@@ -307,3 +343,47 @@ def bulk_action():
         return jsonify({'error': 'Ação inválida'}), 400
         
     return jsonify({'message': f'Ação {action} realizada com sucesso em {len(ids)} leads'})
+
+@leads_bp.route('/<int:lid>/qualify', methods=['POST'])
+@login_required
+def qualify_lead(lid):
+    """SDR: marca lead como Qualificado e opcionalmente atribui a um Closer."""
+    d = request.json or {}
+    row = query("SELECT * FROM leads WHERE id=%s", (lid,), fetchone=True)
+    if not row: return jsonify({'error': 'Lead não encontrado'}), 404
+
+    qual_status = query(
+        "SELECT id FROM lead_statuses WHERE name='Qualificado' AND active=1 LIMIT 1",
+        fetchone=True
+    )
+    if not qual_status:
+        qual_status = {'id': 3}
+
+    new_vendor_id = d.get('vendor_id') or row['vendor_id']
+    note = (d.get('note') or '').strip()
+
+    execute("""
+        UPDATE leads SET status_id=%s, vendor_id=%s, updated_at=NOW()
+        WHERE id=%s
+    """, (qual_status['id'], new_vendor_id, lid))
+
+    if new_vendor_id and str(new_vendor_id) != str(row['vendor_id'] or ''):
+        v_name = query("SELECT name FROM vendors WHERE id=%s", (new_vendor_id,), fetchone=True)
+        execute(
+            "INSERT INTO lead_activities (lead_id,user_id,type,content) VALUES (%s,%s,'transfer',%s)",
+            (lid, g.user['id'], f"Lead qualificado e enviado ao Closer: {v_name['name'] if v_name else '?'}")
+        )
+    else:
+        execute(
+            "INSERT INTO lead_activities (lead_id,user_id,type,content) VALUES (%s,%s,'status_change',%s)",
+            (lid, g.user['id'], "Lead marcado como Qualificado pelo SDR")
+        )
+
+    if note:
+        execute(
+            "INSERT INTO lead_activities (lead_id,user_id,type,content) VALUES (%s,%s,'note',%s)",
+            (lid, g.user['id'], note)
+        )
+
+    log_audit(g.user['id'], 'qualify_lead', target_id=lid)
+    return jsonify({'message': 'Lead qualificado com sucesso'})

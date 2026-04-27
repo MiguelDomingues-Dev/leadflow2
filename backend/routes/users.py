@@ -30,7 +30,7 @@ def create_user():
         return jsonify({'error': 'Nome, e-mail e senha sao obrigatorios'}), 400
     if len(password) < 6:
         return jsonify({'error': 'Senha deve ter pelo menos 6 caracteres'}), 400
-    if role not in ('admin','vendor'):
+    if role not in ('admin','vendor','sdr','billing'):
         return jsonify({'error': 'Role invalido'}), 400
 
     exists = query("SELECT id FROM users WHERE email=%s", (email,), fetchone=True)
@@ -42,8 +42,8 @@ def create_user():
         (name, email, generate_password_hash(password), role)
     )
 
-    # Se for vendor, criar o registro em vendors automaticamente
-    if role == 'vendor':
+    # Se for vendor ou sdr, criar o registro em vendors automaticamente
+    if role in ('vendor','sdr'):
         vid = execute("INSERT INTO vendors (name, user_id) VALUES (%s,%s)", (name, uid))
 
     return jsonify({'id': uid, 'message': 'Usuario criado'}), 201
@@ -59,7 +59,7 @@ def update_user(uid):
         fields.append("name=%s"); params.append(d['name'].strip())
     if d.get('email'):
         fields.append("email=%s"); params.append(d['email'].strip().lower())
-    if d.get('role') in ('admin','vendor'):
+    if d.get('role') in ('admin','vendor','sdr','billing'):
         fields.append("role=%s"); params.append(d['role'])
     if 'active' in d:
         fields.append("active=%s"); params.append(1 if d['active'] else 0)

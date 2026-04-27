@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { CalendarClock, RefreshCw, Phone, ChevronRight, Link2 } from 'lucide-react'
-import { getLeads, getStatuses, generateTrackedLink } from '../api/client'
+import { CalendarClock, RefreshCw, Phone, ChevronRight } from 'lucide-react'
+import { getLeads, getStatuses } from '../api/client'
 import toast from 'react-hot-toast'
 import { formatForDisplay, isToday, isOverdue } from '../utils/date'
 import { useNavigate } from 'react-router-dom'
@@ -84,19 +84,6 @@ export default function Agenda() {
                           <Phone className="w-3.5 h-3.5" /> {l.phone}
                         </a>
                         {st && <span className="text-[10px] font-medium px-2 py-0.5 rounded-md" style={{ color: st.color, backgroundColor: st.color + '18' }}>{st.name}</span>}
-                        {l.specific_video && (
-                          <button onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const res = await generateTrackedLink({ lead_id: l.id, url: l.specific_video });
-                              const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
-                              navigator.clipboard.writeText(fullUrl);
-                              toast.success('Link rastreável copiado!');
-                            } catch (err) {}
-                          }} className="w-6 h-6 rounded-md bg-brand-500/10 hover:bg-brand-500/20 flex items-center justify-center text-brand-400 transition-all ml-1" title="Copiar link rastreável">
-                            <Link2 className="w-3 h-3" />
-                          </button>
-                        )}
                       </div>
                     </div>
                     <div className="hidden md:block text-right flex-shrink-0">

@@ -57,3 +57,14 @@ export const getTopVideos = () => api.get('/dashboard/top-videos')
 export const updateLeadStatus = (leadId, statusId) => api.put('/leads/' + leadId, { status_id: statusId })
 export const generateTrackedLink = d => api.post('/links/generate', d)
 export default api
+export const qualifyLead = (id, d) => api.post('/leads/' + id + '/qualify', d)
+
+export const getProducts = () => api.get('/products/')
+export const createProduct = d => api.post('/products/', d)
+export const updateProduct = (id, d) => api.put('/products/' + id, d)
+export const deleteProduct = id => api.delete('/products/' + id)
+
+export const createSale = d => api.post('/sales/', d)
+export const getSales = p => api.get('/sales/', { params: p })
+export const getSaleDetails = id => api.get('/sales/' + id)
+export const updateSaleStatus = (id, status) => api.put('/sales/' + id + '/status', { status })

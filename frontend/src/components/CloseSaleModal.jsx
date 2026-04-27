@@ -1,0 +1,337 @@
+import { useState, useEffect } from 'react'
+import { CheckCircle, X, ShoppingCart, User, Plus, Trash2, Zap, CreditCard } from 'lucide-react'
+import { getProducts, createSale } from '../api/client'
+import toast from 'react-hot-toast'
+import { maskCPF, maskCEP } from '../utils/masks'
+
+export default function CloseSaleModal({ lead, onClose, onSuccess }) {
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  
+  // Sale details
+  const [items, setItems] = useState([])
+  const [selectedProductId, setSelectedProductId] = useState('')
+  
+  // Billing info
+  const [billing, setBilling] = useState({
+    cpf: '', address: '', city: '', state: '', zipcode: ''
+  })
+  
+  // Payment info
+  const [paymentMethod, setPaymentMethod] = useState('pix')
+  const [installments, setInstallments] = useState(1)
+  const [discount, setDiscount] = useState('')
+  const [observations, setObservations] = useState('')
+
+  useEffect(() => {
+    getProducts().then(res => {
+      setProducts((res.data || []).filter(p => p.active))
+      setLoading(false)
+    })
+  }, [])
+
+  const handleAddItem = () => {
+    if (!selectedProductId) return
+    const prod = products.find(p => p.id === parseInt(selectedProductId))
+    if (!prod) return
+    
+    setItems(prev => {
+      const existing = prev.find(i => i.product_id === prod.id)
+      if (existing) {
+        return prev.map(i => i.product_id === prod.id ? { ...i, quantity: i.quantity + 1 } : i)
+      }
+      return [...prev, { product_id: prod.id, product_name: prod.name, unit_price: prod.price, quantity: 1 }]
+    })
+    setSelectedProductId('')
+  }
+
+  const handleRemoveItem = (idx) => {
+    setItems(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleUpdateQty = (idx, q) => {
+    if (q < 1) return
+    setItems(prev => prev.map((item, i) => i === idx ? { ...item, quantity: q } : item))
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    if (items.length === 0) return toast.error('Adicione pelo menos 1 produto')
+    if (!billing.cpf || !billing.address) return toast.error('Preencha CPF e Endereço para faturamento')
+    
+    setSaving(true)
+    try {
+      await createSale({
+        lead_id: lead.id,
+        items,
+        billing_info: billing,
+        payment_method: paymentMethod,
+        installments: parseInt(installments) || 1,
+        discount: parseFloat(discount) || 0,
+        observations
+      })
+      toast.success('Venda concluída e enviada ao faturamento!')
+      onSuccess()
+    } catch {
+      toast.error('Erro ao salvar venda')
+    }
+    setSaving(false)
+  }
+
+  const total = items.reduce((acc, item) => acc + (parseFloat(item.unit_price) * item.quantity), 0)
+  const finalTotal = Math.max(0, total - (parseFloat(discount) || 0))
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-surface-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="w-full max-w-2xl bg-surface-900 border border-surface-800 rounded-2xl shadow-2xl flex flex-col max-h-[95vh]">
+        
+        {/* Header */}
+        <div className="p-5 border-b border-surface-800 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="text-xl font-bold text-surface-100 flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-brand-500" /> Fechar Venda
+            </h2>
+            <p className="text-xs text-surface-400 mt-0.5">Cliente: <span className="font-bold text-surface-200">{lead.name}</span></p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg bg-surface-800 text-surface-400 hover:text-surface-100 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          
+          {/* Sessão 1: Produtos */}
+          <div>
+            <h3 className="text-sm font-bold text-surface-300 uppercase tracking-wide flex items-center gap-2 mb-3">
+              <ShoppingCart className="w-4 h-4 text-surface-500" /> Produtos Vendidos
+            </h3>
+            
+            <div className="flex gap-2 mb-4">
+              <select 
+                value={selectedProductId} 
+                onChange={e => setSelectedProductId(e.target.value)}
+                className="input flex-1"
+                disabled={loading}
+              >
+                <option value="">-- Selecione o Produto --</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} (R$ {parseFloat(p.price).toLocaleString('pt-BR')})</option>
+                ))}
+              </select>
+              <button 
+                type="button"
+                onClick={handleAddItem}
+                className="btn-secondary whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" /> Adicionar
+              </button>
+            </div>
+
+            {items.length > 0 ? (
+              <div className="border border-surface-800 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-surface-800/50 text-surface-400">
+                    <tr>
+                      <th className="px-4 py-2">Produto</th>
+                      <th className="px-4 py-2 w-24">Qtd</th>
+                      <th className="px-4 py-2 text-right">Preço</th>
+                      <th className="px-4 py-2 text-center w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-800">
+                    {items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-3 font-medium text-surface-200">{item.product_name}</td>
+                        <td className="px-4 py-3">
+                          <input 
+                            type="number" min="1" value={item.quantity} 
+                            onChange={e => handleUpdateQty(idx, parseInt(e.target.value))}
+                            className="input !py-1 px-2 h-8"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-green-400">
+                          R$ {(item.unit_price * item.quantity).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button onClick={() => handleRemoveItem(idx)} className="text-red-400 hover:text-red-300">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-surface-950/50">
+                      <td colSpan="2" className="px-4 py-3 text-right font-bold text-surface-300 uppercase text-xs">Total:</td>
+                      <td className="px-4 py-3 text-right font-mono font-black text-brand-400 text-lg">
+                        R$ {total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                      </td>
+                      <td></td>
+                    </tr>
+                    {parseFloat(discount) > 0 && (
+                      <tr className="bg-red-500/5">
+                        <td colSpan="2" className="px-4 py-2 text-right font-bold text-red-400 uppercase text-xs">Desconto:</td>
+                        <td className="px-4 py-2 text-right font-mono font-bold text-red-400">
+                          - R$ {parseFloat(discount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
+                    <tr className="bg-surface-900">
+                      <td colSpan="2" className="px-4 py-3 text-right font-bold text-surface-200 uppercase text-sm">Valor Final:</td>
+                      <td className="px-4 py-3 text-right font-mono font-black text-emerald-400 text-xl">
+                        R$ {finalTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-6 border border-dashed border-surface-700 rounded-xl text-surface-500 text-sm">
+                Nenhum produto adicionado à venda.
+              </div>
+            )}
+          </div>
+
+          {/* Sessão 1.5: Pagamento e Negociação */}
+          <div>
+            <h3 className="text-sm font-bold text-surface-300 uppercase tracking-wide flex items-center gap-2 mb-3">
+              <CreditCard className="w-4 h-4 text-surface-500" /> Pagamento e Negociação
+            </h3>
+            <div className="card p-4 bg-surface-900 border border-surface-800 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="label">Forma de Pagamento *</label>
+                  <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="input">
+                    <option value="pix">PIX</option>
+                    <option value="credit_card">Cartão de Crédito</option>
+                    <option value="boleto">Boleto</option>
+                    <option value="transfer">Transferência Bancária</option>
+                  </select>
+                </div>
+                
+                {paymentMethod === 'credit_card' ? (
+                  <div>
+                    <label className="label">Parcelas</label>
+                    <select value={installments} onChange={e => setInstallments(e.target.value)} className="input">
+                      {[...Array(12)].map((_, i) => (
+                        <option key={i+1} value={i+1}>{i+1}x</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div></div>
+                )}
+
+                <div>
+                  <label className="label">Desconto (R$)</label>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    step="0.01" 
+                    value={discount} 
+                    onChange={e => setDiscount(e.target.value)} 
+                    placeholder="0.00" 
+                    className="input font-mono"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="label">Observações sobre a Venda</label>
+                <textarea 
+                  value={observations} 
+                  onChange={e => setObservations(e.target.value)} 
+                  rows={2} 
+                  className="input resize-none" 
+                  placeholder="Ex: Cliente quer que a nota seja emitida em nome da empresa X..." 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sessão 2: Dados Sensíveis (Faturamento) */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-surface-300 uppercase tracking-wide flex items-center gap-2">
+                <User className="w-4 h-4 text-surface-500" /> Dados para Faturamento
+              </h3>
+              <span className="text-[10px] text-brand-400 font-bold bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">
+                CRIPTOGRAFADO END-TO-END
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">CPF do Cliente *</label>
+                <input 
+                  value={billing.cpf} 
+                  onChange={e => setBilling({...billing, cpf: maskCPF(e.target.value)})}
+                  className="input font-mono" 
+                  placeholder="000.000.000-00"
+                />
+              </div>
+              <div>
+                <label className="label">CEP</label>
+                <input 
+                  value={billing.zipcode} 
+                  onChange={e => setBilling({...billing, zipcode: maskCEP(e.target.value)})}
+                  className="input font-mono" 
+                  placeholder="00000-000"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="label">Endereço Completo de Entrega *</label>
+                <input 
+                  value={billing.address} 
+                  onChange={e => setBilling({...billing, address: e.target.value})}
+                  className="input" 
+                  placeholder="Rua, Número, Complemento, Bairro"
+                />
+              </div>
+              <div>
+                <label className="label">Cidade *</label>
+                <input 
+                  value={billing.city} 
+                  onChange={e => setBilling({...billing, city: e.target.value})}
+                  className="input" 
+                  placeholder="Ex: São Paulo"
+                />
+              </div>
+              <div>
+                <label className="label">Estado (UF) *</label>
+                <input 
+                  value={billing.state} 
+                  onChange={e => setBilling({...billing, state: e.target.value})}
+                  className="input" 
+                  placeholder="Ex: SP"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-surface-500 mt-2">
+              * Estes dados serão criptografados antes de salvar no banco e ficarão visíveis apenas para o setor de Faturamento para emissão da NF.
+            </p>
+          </div>
+
+        </div>
+
+        {/* Footer */}
+        <div className="p-5 border-t border-surface-800 flex gap-3 shrink-0 bg-surface-900">
+          <button type="button" onClick={onClose} className="flex-1 btn-secondary py-3">
+            Cancelar Venda
+          </button>
+          <button 
+            onClick={handleSave} 
+            disabled={saving || items.length === 0} 
+            className="flex-1 btn-primary bg-brand-600 hover:bg-brand-500 py-3 text-white disabled:opacity-50"
+          >
+            {saving ? <CheckCircle className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+            Confirmar e Enviar ao Faturamento
+          </button>
+        </div>
+
+      </div>
+    </div>
+  )
+}

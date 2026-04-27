@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { Save, ArrowLeft, Zap, CheckCircle, Link2, Copy, Check, ExternalLink } from 'lucide-react'
-import { getLead, createLead, updateLead, getPlatforms, getVendors, getStatuses, generateTrackedLink } from '../api/client'
+import { Save, ArrowLeft, Zap, CheckCircle } from 'lucide-react'
+import { getLead, createLead, updateLead, getPlatforms, getVendors, getStatuses } from '../api/client'
 import toast from 'react-hot-toast'
+import { useAuth } from '../context/AuthContext'
 import { Toaster } from 'react-hot-toast'
 import { formatForInput } from '../utils/date'
+import { maskPhone } from '../utils/masks'
 
 const FOLLOW_OPTIONS = [
   { value:'nao_acompanha', label:'Não acompanha' },
@@ -14,13 +16,14 @@ const FOLLOW_OPTIONS = [
   { value:'mais_6_meses',  label:'Mais de 6 meses' },
 ]
 
-const BLANK = { name:'', phone:'', email:'', platform_id:'', vendor_id:'', specific_video:'', follow_time:'nao_acompanha', interest:'', notes:'', status_id:'', next_contact:'' }
+const BLANK = { name:'', phone:'', email:'', platform_id:'', sdr_id:'', vendor_id:'', specific_video:'', follow_time:'nao_acompanha', interest:'', notes:'', status_id:'', next_contact:'' }
 
 // ── Admin form (with sidebar layout) ─────────────────────────
 export function LeadForm() {
   const { id } = useParams()
   const isEdit  = Boolean(id)
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [form, setForm]           = useState(BLANK)
   const [platforms, setPlatforms] = useState([])
   const [vendors, setVendors]     = useState([])
@@ -43,6 +46,9 @@ export function LeadForm() {
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // Decide para onde voltar baseado no role
+  const backPath = user?.role === 'sdr' ? '/sdr-inbox' : user?.role === 'vendor' ? '/meus-leads' : '/leads'
+
   const handleSubmit = async e => {
     e.preventDefault()
     if (!form.name.trim()) return toast.error('Nome é obrigatório')
@@ -53,7 +59,7 @@ export function LeadForm() {
       const payload = { ...form, status_id: form.status_id ? Number(form.status_id) : undefined }
       if (isEdit) { await updateLead(id, payload); toast.success('Lead atualizado!') }
       else { await createLead(payload); toast.success('Lead registrado!') }
-      navigate('/leads')
+      navigate(backPath)
     } catch {}
     setSaving(false)
   }
@@ -61,7 +67,7 @@ export function LeadForm() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-4">
-        <Link to="/leads" className="w-9 h-9 rounded-xl bg-surface-800 hover:bg-surface-700 flex items-center justify-center text-surface-400 transition-all">
+        <Link to={backPath} className="w-9 h-9 rounded-xl bg-surface-800 hover:bg-surface-700 flex items-center justify-center text-surface-400 transition-all">
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div>
@@ -70,7 +76,7 @@ export function LeadForm() {
         </div>
       </div>
       <FormBody form={form} set={set} setForm={setForm} platforms={platforms} vendors={vendors} statuses={statuses}
-        saving={saving} onSubmit={handleSubmit} isEdit={isEdit} showVendor={true} showStatus={isEdit} leadId={id} />
+        saving={saving} onSubmit={handleSubmit} isEdit={isEdit} showVendor={user?.role === 'admin'} showStatus={isEdit && user?.role === 'admin'} leadId={id} user={user} />
     </div>
   )
 }
@@ -144,30 +150,7 @@ export function Collector() {
 }
 
 // ── Shared form body ──────────────────────────────────────────
-function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, onSubmit, isEdit, showVendor, showStatus, submitLabel, leadId }) {
-  const [generating, setGenerating] = useState(false)
-  const [trackedLink, setTrackedLink] = useState('')
-  const [copied, setCopied] = useState(false)
-
-  const handleGenerateLink = async () => {
-    if (!form.specific_video) return toast.error('Insira o link do vídeo primeiro')
-    setGenerating(true)
-    try {
-      const res = await generateTrackedLink({ lead_id: leadId, url: form.specific_video })
-      // Use the current origin + the tracked path from backend
-      const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`
-      setTrackedLink(fullUrl)
-      toast.success('Link rastreável gerado!')
-    } catch {}
-    setGenerating(false)
-  }
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(trackedLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
+function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, onSubmit, isEdit, showVendor, showStatus, submitLabel, leadId, user }) {
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {/* Cliente */}
@@ -180,7 +163,7 @@ function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, on
           </div>
           <div>
             <label className="label">Telefone / WhatsApp *</label>
-            <input value={form.phone} onChange={set('phone')} placeholder="(11) 99999-9999" className="input" />
+            <input value={form.phone} onChange={e => setForm(f => ({...f, phone: maskPhone(e.target.value)}))} placeholder="(11) 99999-9999" className="input" />
           </div>
         </div>
         <div>
@@ -206,31 +189,7 @@ function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, on
         </div>
         <div>
           <label className="label">Vídeo específico que assistiu?</label>
-          <div className="flex gap-2">
-            <input value={form.specific_video || ''} onChange={set('specific_video')} placeholder="Ex: 'Como organizar estoque' ou link do vídeo" className="input" />
-            {isEdit && (
-              <button type="button" onClick={handleGenerateLink} disabled={generating}
-                className="btn-secondary px-3" title="Gerar link rastreável">
-                <Link2 className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
-              </button>
-            )}
-          </div>
-          {trackedLink && (
-            <div className="mt-2 p-3 bg-brand-500/10 border border-brand-500/20 rounded-xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider mb-1">Link Rastreável Gerado</p>
-                <p className="text-xs text-surface-200 truncate font-mono">{trackedLink}</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <a href={trackedLink} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-brand-500/20 rounded-lg text-brand-400 transition-colors">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                <button type="button" onClick={copyToClipboard} className="p-2 hover:bg-brand-500/20 rounded-lg text-brand-400 transition-colors">
-                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
+          <input value={form.specific_video || ''} onChange={set('specific_video')} placeholder="Ex: 'Como organizar estoque' ou link do vídeo" className="input" />
         </div>
         <div>
           <label className="label">Há quanto tempo acompanha?</label>
@@ -248,12 +207,21 @@ function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, on
           <input value={form.interest || ''} onChange={set('interest')} placeholder="Ex: Quer melhorar o controle de estoque..." className="input" />
         </div>
         {showVendor && (
-          <div>
-            <label className="label">Vendedor responsável</label>
-            <select value={form.vendor_id || ''} onChange={set('vendor_id')} className="input">
-              <option value="">Selecionar vendedor...</option>
-              {vendors.filter(v => v.active).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Pré-vendedor (SDR)</label>
+              <select value={form.sdr_id || ''} onChange={set('sdr_id')} className="input">
+                <option value="">Selecionar SDR...</option>
+                {vendors.filter(v => v.active && v.role === 'sdr').map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Vendedor (Closer)</label>
+              <select value={form.vendor_id || ''} onChange={set('vendor_id')} className="input">
+                <option value="">Selecionar vendedor...</option>
+                {vendors.filter(v => v.active && v.role === 'vendor').map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </div>
           </div>
         )}
         {showStatus && statuses.length > 0 && (

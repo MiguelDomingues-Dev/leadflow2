@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, Plus, Trash2, Edit2, RefreshCw, Users, Download, MessageCircle, ChevronLeft, ChevronRight, X, Phone, Mail, Link2 } from 'lucide-react'
-import { getLeads, getPlatforms, getVendors, getStatuses, deleteLead, updateLead, bulkActionLeads, generateTrackedLink } from '../api/client'
+import { Search, Plus, Trash2, Edit2, RefreshCw, Users, Download, MessageCircle, ChevronLeft, ChevronRight, X, Phone, Mail } from 'lucide-react'
+import { getLeads, getPlatforms, getVendors, getStatuses, deleteLead, updateLead, bulkActionLeads } from '../api/client'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
@@ -73,6 +73,8 @@ export default function Leads() {
   const [search, setSearch]       = useState('')
   const [platF, setPlatF]         = useState('')
   const [statusF, setStatusF]     = useState('')
+  const [sdrF, setSdrF]           = useState('')
+  const [vendorF, setVendorF]     = useState('')
   const [periodF, setPeriodF]     = useState('')
   const [exporting, setExporting] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
@@ -83,7 +85,7 @@ export default function Leads() {
     setLoading(true)
     try {
       const [l, plat, v, s] = await Promise.all([
-        getLeads({ search, platform_id: platF, status_id: statusF, period: periodF, page: p, per_page: PER_PAGE }),
+        getLeads({ search, platform_id: platF, status_id: statusF, sdr_id: sdrF, vendor_id: vendorF, period: periodF, page: p, per_page: PER_PAGE }),
         getPlatforms(), getVendors(), getStatuses()
       ])
       // Backend may return { data, total } or just an array
@@ -98,9 +100,9 @@ export default function Leads() {
       setPlatforms(plat.data); setVendors(v.data); setStatuses(s.data)
     } catch {}
     setLoading(false)
-  }, [search, platF, statusF, periodF, page])
+  }, [search, platF, statusF, sdrF, vendorF, periodF, page])
 
-  useEffect(() => { setPage(1); load(1) }, [search, platF, statusF, periodF]) // eslint-disable-line
+  useEffect(() => { setPage(1); load(1) }, [search, platF, statusF, sdrF, vendorF, periodF]) // eslint-disable-line
   useEffect(() => { load(page) }, [page]) // eslint-disable-line
 
   const handleDelete = async (id, name) => {
@@ -233,6 +235,14 @@ export default function Leads() {
           <option value="">Todos os status</option>
           {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        <select value={sdrF} onChange={e => setSdrF(e.target.value)} className="input w-auto min-w-40">
+          <option value="">Todos os SDRs</option>
+          {vendors.filter(v => v.role === 'sdr').map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+        <select value={vendorF} onChange={e => setVendorF(e.target.value)} className="input w-auto min-w-40">
+          <option value="">Todos os Vendedores</option>
+          {vendors.filter(v => v.role === 'vendor').map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
         <select value={periodF} onChange={e => setPeriodF(e.target.value)} className="input w-auto min-w-36">
           <option value="">Todos os períodos</option>
           <option value="today">Hoje</option>
@@ -263,6 +273,7 @@ export default function Leads() {
                   <th className="px-5 py-4 font-medium">Cliente</th>
                   <th className="px-4 py-4 font-medium">Contato</th>
                   <th className="px-4 py-4 font-medium">Plataforma</th>
+                  <th className="px-4 py-4 font-medium">SDR</th>
                   <th className="px-4 py-4 font-medium">Vendedor</th>
                   <th className="px-4 py-4 font-medium">Acompanha</th>
                   <th className="px-4 py-4 font-medium">Status</th>
@@ -305,6 +316,9 @@ export default function Leads() {
                         : <span className="text-surface-500 text-xs">—</span>}
                     </td>
 
+                    {/* SDR */}
+                    <td className="px-4 py-3 text-surface-400 text-xs">{l.sdr_name || '—'}</td>
+
                     {/* Vendedor */}
                     <td className="px-4 py-3 text-surface-400 text-xs">{l.vendor_name || '—'}</td>
 
@@ -330,19 +344,6 @@ export default function Leads() {
                           title="Abrir WhatsApp">
                           <MessageCircle className="w-3.5 h-3.5" />
                         </a>
-                        {/* Link Tracker */}
-                        {l.specific_video && (
-                          <button onClick={async () => {
-                            try {
-                              const res = await generateTrackedLink({ lead_id: l.id, url: l.specific_video });
-                              const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
-                              navigator.clipboard.writeText(fullUrl);
-                              toast.success('Link rastreável copiado!');
-                            } catch (err) {}
-                          }} className="w-8 h-8 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 flex items-center justify-center text-brand-400 transition-all" title="Gerar link rastreável">
-                            <Link2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
                         {/* Editar */}
                         <Link to={`/leads/${l.id}/edit`}
                           className="w-8 h-8 rounded-lg bg-surface-800 hover:bg-surface-700 flex items-center justify-center text-surface-400 hover:text-surface-100 transition-all">
@@ -391,6 +392,9 @@ export default function Leads() {
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-surface-800/50 border border-surface-700/50 text-surface-400">
+                    🔄 {l.sdr_name || 'Sem SDR'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-surface-800/50 border border-surface-700/50 text-surface-400">
                     👤 {l.vendor_name || 'Sem vendedor'}
                   </span>
                   {l.next_contact && (
@@ -409,18 +413,7 @@ export default function Leads() {
                       className="w-8 h-8 rounded-lg bg-green-500/10 hover:bg-green-500/20 flex items-center justify-center text-green-400 transition-all">
                       <MessageCircle className="w-4 h-4" />
                     </a>
-                    {l.specific_video && (
-                      <button onClick={async () => {
-                        try {
-                          const res = await generateTrackedLink({ lead_id: l.id, url: l.specific_video });
-                          const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
-                          navigator.clipboard.writeText(fullUrl);
-                          toast.success('Link rastreável copiado!');
-                        } catch (err) {}
-                      }} className="w-8 h-8 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 flex items-center justify-center text-brand-400 transition-all">
-                        <Link2 className="w-4 h-4" />
-                      </button>
-                    )}
+
                     <Link to={`/leads/${l.id}/edit`}
                       className="w-8 h-8 rounded-lg bg-surface-800 hover:bg-surface-700 flex items-center justify-center text-surface-400">
                       <Edit2 className="w-4 h-4" />

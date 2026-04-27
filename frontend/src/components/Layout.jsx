@@ -8,15 +8,25 @@ export function ProtectedRoute({ adminOnly = false }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="min-h-screen bg-surface-950 flex items-center justify-center"><RefreshCw className="w-6 h-6 text-brand-500 animate-spin" /></div>
   if (!user) return <Navigate to="/login" replace />
-  if (adminOnly && user.role !== 'admin') return <Navigate to="/meus-leads" replace />
+  if (adminOnly && user.role !== 'admin') {
+    if (user.role === 'sdr') return <Navigate to="/sdr-inbox" replace />
+    if (user.role === 'billing') return <Navigate to="/faturamento" replace />
+    return <Navigate to="/meus-leads" replace />
+  }
   return <Outlet />
 }
 
-export function VendorRoute() {
+export function VendorRoute({ allowedRoles }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="min-h-screen bg-surface-950 flex items-center justify-center"><RefreshCw className="w-6 h-6 text-brand-500 animate-spin" /></div>
   if (!user) return <Navigate to="/login" replace />
   if (user.role === 'admin') return <Navigate to="/" replace />
+  
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (user.role === 'sdr') return <Navigate to="/sdr-inbox" replace />
+    if (user.role === 'billing') return <Navigate to="/faturamento" replace />
+    return <Navigate to="/meus-leads" replace />
+  }
   return <Outlet />
 }
 

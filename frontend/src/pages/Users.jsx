@@ -70,13 +70,13 @@ export default function Users() {
             </div>
             <div>
               <label className="label">Perfil</label>
-              <div className="flex gap-3">
-                {['admin','vendor'].map(r => (
+              <div className="flex gap-2">
+                {['admin','vendor','sdr','billing'].map(r => (
                   <button key={r} type="button" onClick={() => setForm(f => ({ ...f, role:r }))}
-                    className={'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ' +
+                    className={'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all px-1 ' +
                       (form.role === r ? 'border-brand-500 bg-brand-600/10 text-brand-400' : 'border-surface-700 bg-surface-800 text-surface-400 hover:border-surface-600')}>
-                    {r === 'admin' ? <Shield className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                    {r === 'admin' ? 'Admin' : 'Vendedor'}
+                    {r === 'admin' ? <Shield className="w-4 h-4" /> : (r === 'sdr' ? <RefreshCw className="w-4 h-4" /> : r === 'billing' ? <UserCheck className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />)}
+                    {r === 'admin' ? 'Admin' : (r === 'sdr' ? 'SDR' : r === 'billing' ? 'Faturamento' : 'Vendedor')}
                   </button>
                 ))}
               </div>
@@ -109,8 +109,8 @@ export default function Users() {
                   <td className="px-5 py-3 font-medium text-surface-100">{u.name}{u.id === me.id && <span className="ml-2 text-xs text-brand-400">(você)</span>}</td>
                   <td className="px-4 py-3 text-surface-400">{u.email}</td>
                   <td className="px-4 py-3">
-                    <span className={'badge ' + (u.role === 'admin' ? 'bg-brand-600/10 text-brand-400' : 'bg-surface-700 text-surface-300')}>
-                      {u.role === 'admin' ? '⚡ Admin' : '👤 Vendedor'}
+                    <span className={'badge ' + (u.role === 'admin' ? 'bg-brand-600/10 text-brand-400' : (u.role === 'sdr' ? 'bg-indigo-500/10 text-indigo-400' : u.role === 'billing' ? 'bg-blue-500/10 text-blue-400' : 'bg-surface-700 text-surface-300'))}>
+                      {u.role === 'admin' ? '⚡ Admin' : (u.role === 'sdr' ? '🔄 SDR' : u.role === 'billing' ? '📄 Faturamento' : '👤 Vendedor')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-surface-500 text-xs">{u.last_login ? new Date(u.last_login).toLocaleDateString('pt-BR') : '—'}</td>

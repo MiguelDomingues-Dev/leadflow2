@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Search, RefreshCw, ChevronRight, MessageSquare, Phone, Calendar, ArrowUpRight, ArrowLeft, Mic, Square, Trash2, Link2 } from 'lucide-react'
-import { getLeads, getLead, updateLead, addActivity, getStatuses, getPlatforms, addAudioActivity, generateTrackedLink } from '../api/client'
+import { Search, RefreshCw, ChevronRight, MessageSquare, Phone, Calendar, ArrowUpRight, ArrowLeft, Mic, Square, Trash2, Zap } from 'lucide-react'
+import { getLeads, getLead, updateLead, addActivity, getStatuses, getPlatforms, addAudioActivity } from '../api/client'
 import toast from 'react-hot-toast'
 import { formatForDisplay, formatForInput } from '../utils/date'
+import CloseSaleModal from '../components/CloseSaleModal'
 
 const FOLLOW = { menos_1_mes:'< 1 mês', '1_3_meses':'1–3 meses', '3_6_meses':'3–6 meses', mais_6_meses:'> 6 meses', nao_acompanha:'Não acompanha' }
 const ACT_ICONS = { note:'💬', contact:'📞', status_change:'🔄', created:'✨', audio:'🎙️' }
@@ -13,6 +14,7 @@ export default function MyLeads() {
   const [leads, setLeads]       = useState([])
   const [statuses, setStatuses] = useState([])
   const [loading, setLoading]   = useState(true)
+  const [activeTab, setActiveTab] = useState('ativos')
   const [search, setSearch]     = useState('')
   const [statusF, setStatusF]   = useState('')
   const [selected, setSelected] = useState(null)
@@ -24,6 +26,8 @@ export default function MyLeads() {
   const [editStatus, setEditStatus] = useState('')
   const [viewMode, setViewMode] = useState('list')
   const [showWppTemplates, setShowWppTemplates] = useState(false)
+  const [showCloseModal, setShowCloseModal] = useState(false)
+  const [targetStatusId, setTargetStatusId] = useState('')
   
   // Audio recording state
   const [isRecording, setIsRecording] = useState(false)
@@ -81,6 +85,15 @@ export default function MyLeads() {
 
   const handleStatusChange = async (sid) => {
     if (!detail) return
+    
+    // Check if the new status is 'Convertido'
+    const statusObj = statuses.find(s => String(s.id) === String(sid))
+    if (statusObj && statusObj.name.toLowerCase() === 'convertido') {
+      setTargetStatusId(sid)
+      setShowCloseModal(true)
+      return // Don't update yet, wait for the modal to succeed
+    }
+    
     setEditStatus(sid)
     try {
       await updateLead(detail.id, { ...detail, status_id: sid })
@@ -88,6 +101,22 @@ export default function MyLeads() {
       load()
       const r = await getLead(detail.id); setDetail(r.data)
     } catch {}
+  }
+  
+  const handleSaleSuccess = async () => {
+    setShowCloseModal(false)
+    setEditStatus(targetStatusId)
+    try {
+      await updateLead(detail.id, { ...detail, status_id: targetStatusId })
+      load()
+      const r = await getLead(detail.id); setDetail(r.data)
+    } catch {}
+  }
+
+  const handleOpenSaleModal = () => {
+    const statusObj = statuses.find(s => s.name.toLowerCase() === 'convertido')
+    if (statusObj) setTargetStatusId(String(statusObj.id))
+    setShowCloseModal(true)
   }
 
   const handleNextContact = async (date) => {
@@ -161,9 +190,33 @@ export default function MyLeads() {
   }
 
   const getStatusObj = (id) => statuses.find(s => String(s.id) === String(id))
+  const convertidoStatusObj = statuses.find(s => s.name.toLowerCase() === 'convertido')
+  const convertidoStatusId = convertidoStatusObj ? String(convertidoStatusObj.id) : null
 
-  const filteredLeads = leads.filter(l => !statusF || String(l.status_id) === statusF)
-  const statusCounts = leads.reduce((acc, l) => {
+  // Filter by search query
+  let baseLeads = leads.filter(l => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      return l.name?.toLowerCase().includes(q) || l.phone?.includes(q) || l.email?.toLowerCase().includes(q)
+    }
+    return true
+  })
+
+  // Filter by tab
+  if (activeTab === 'ativos') {
+    if (convertidoStatusId) {
+      baseLeads = baseLeads.filter(l => String(l.status_id) !== convertidoStatusId)
+    }
+  } else if (activeTab === 'concluidos') {
+    if (convertidoStatusId) {
+      baseLeads = baseLeads.filter(l => String(l.status_id) === convertidoStatusId)
+    } else {
+      baseLeads = []
+    }
+  }
+
+  const filteredLeads = baseLeads.filter(l => !statusF || String(l.status_id) === statusF)
+  const statusCounts = baseLeads.reduce((acc, l) => {
     acc[l.status_id] = (acc[l.status_id] || 0) + 1; return acc;
   }, {})
 
@@ -232,11 +285,24 @@ export default function MyLeads() {
     <div className="flex md:gap-6 h-[calc(100vh-8rem)] md:h-[calc(100vh-4rem)] pb-8 md:pb-0">
       {viewMode === 'kanban' ? (
         <div className="flex flex-col w-full h-full gap-4">
-          {/* Header Kanban */}
+          {/* Header Kanban / Navigation */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold">Kanban de Leads</h1>
-              <p className="text-surface-500 text-sm mt-0.5">{filteredLeads.length} lead(s)</p>
+              <div className="flex gap-2 mb-2">
+                <button 
+                  onClick={() => setActiveTab('ativos')} 
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'ativos' ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20' : 'bg-surface-800 text-surface-500 border border-surface-700'}`}
+                >
+                  Leads em Negociação
+                </button>
+                <button 
+                  onClick={() => setActiveTab('concluidos')} 
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'concluidos' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-surface-800 text-surface-500 border border-surface-700'}`}
+                >
+                  Vendas Concluídas
+                </button>
+              </div>
+              <p className="text-surface-500 text-sm mt-1">{filteredLeads.length} lead(s) encontrado(s)</p>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -250,23 +316,50 @@ export default function MyLeads() {
             </div>
           </div>
           
-          {/* Board */}
-          <div ref={boardRef} 
-               onDragOver={handleBoardDragOver}
-               onMouseDown={handleMouseDown}
-               onMouseLeave={handleMouseLeave}
-               onMouseUp={handleMouseUp}
-               onMouseMove={handleMouseMove}
-               className="flex-1 overflow-x-auto flex gap-4 pb-4 items-start cursor-grab active:cursor-grabbing custom-scrollbar">
-            {statuses.map(s => {
-              const colLeads = filteredLeads.filter(l => String(l.status_id) === String(s.id))
-              return (
-                <div key={s.id} className="flex flex-col flex-shrink-0 w-80 bg-surface-900/40 rounded-2xl border border-surface-800 max-h-full"
-                  onDrop={e => handleDrop(e, s.id)} onDragOver={e => e.preventDefault()}>
-                  <div className="p-4 border-b border-surface-800/50 flex items-center justify-between bg-surface-900/50 rounded-t-2xl">
-                    <span className="font-semibold text-sm" style={{ color: s.color }}>{s.name}</span>
-                    <span className="text-xs font-bold text-surface-400 bg-surface-800 px-2 py-0.5 rounded-full">{colLeads.length}</span>
+          {/* Board Area */}
+          <div className="flex-1 overflow-hidden relative">
+            {activeTab === 'concluidos' ? (
+              <div className="h-full overflow-y-auto pr-2 custom-scrollbar">
+                {filteredLeads.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-surface-500">
+                    <Zap className="w-12 h-12 opacity-20 mb-3" />
+                    <p>Nenhuma venda concluída encontrada.</p>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-12">
+                    {filteredLeads.map(lead => (
+                      <div key={lead.id} onClick={() => { setViewMode('list'); openDetail(lead.id); }} className="card p-4 cursor-pointer hover:border-brand-500/50 transition-all bg-surface-900 border border-surface-800">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-bold text-surface-200">{lead.name}</h3>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Convertido</span>
+                        </div>
+                        <p className="text-xs text-surface-400 font-mono mb-3">{lead.phone}</p>
+                        <p className="text-xs text-surface-500">Clique para ver detalhes</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div 
+                ref={boardRef}
+                onDragOver={handleBoardDragOver}
+                onMouseDown={handleMouseDown}
+                onMouseLeave={handleMouseLeave}
+                onMouseUp={handleMouseUp}
+                onMouseMove={handleMouseMove}
+                className="flex gap-4 h-full overflow-x-auto overflow-y-hidden pb-4 custom-scrollbar select-none"
+                style={{ cursor: isDraggingBoard.current ? 'grabbing' : 'grab' }}
+              >
+                {statuses.filter(s => s.name.toLowerCase() !== 'convertido').map(s => {
+                  const colLeads = filteredLeads.filter(l => String(l.status_id) === String(s.id))
+                  return (
+                    <div key={s.id} className="flex flex-col flex-shrink-0 w-80 bg-surface-900/40 rounded-2xl border border-surface-800 max-h-full"
+                      onDrop={e => handleDrop(e, s.id)} onDragOver={e => e.preventDefault()}>
+                      <div className="p-4 border-b border-surface-800/50 flex items-center justify-between bg-surface-900/50 rounded-t-2xl">
+                        <span className="font-semibold text-sm" style={{ color: s.color }}>{s.name}</span>
+                        <span className="text-xs font-bold text-surface-400 bg-surface-800 px-2 py-0.5 rounded-full">{colLeads.length}</span>
+                      </div>
                   <div className="p-3 flex-1 overflow-y-auto space-y-3">
                     {colLeads.map(l => (
                       <div key={l.id} draggable onDragStart={e => handleDragStart(e, l.id)}
@@ -289,23 +382,37 @@ export default function MyLeads() {
                 </div>
               )
             })}
+              </div>
+            )}
           </div>
         </div>
       ) : (
         <>
           {/* Left — list */}
           <div className={`flex-col gap-4 w-full md:max-w-sm flex-shrink-0 h-full ${selected ? 'hidden md:flex' : 'flex'}`}>
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-xl font-bold">Meus Leads</h1>
-                <p className="text-surface-500 text-sm mt-0.5">{filteredLeads.length} lead(s)</p>
+            <div className="flex flex-col gap-3">
+              <div className="flex justify-between items-start">
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setActiveTab('ativos')} 
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'ativos' ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20' : 'bg-surface-800 text-surface-500 border border-surface-700'}`}
+                  >
+                    Negociação
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('concluidos')} 
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'concluidos' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-surface-800 text-surface-500 border border-surface-700'}`}
+                  >
+                    Concluídas
+                  </button>
+                </div>
+                <div className="flex bg-surface-900 rounded-lg p-1 border border-surface-800 ml-2">
+                  <button className="px-3 py-1.5 rounded-md text-sm font-medium bg-surface-800 text-surface-100">Lista</button>
+                  <button onClick={() => { setViewMode('kanban'); setSelected(null); }} className="px-3 py-1.5 rounded-md text-sm font-medium text-surface-500 hover:text-surface-300">Kanban</button>
+                </div>
               </div>
-              <div className="flex bg-surface-900 rounded-lg p-1 border border-surface-800">
-                <button className="px-3 py-1.5 rounded-md text-sm font-medium bg-surface-800 text-surface-100">Lista</button>
-                <button onClick={() => { setViewMode('kanban'); setSelected(null); }} className="px-3 py-1.5 rounded-md text-sm font-medium text-surface-500 hover:text-surface-300">Kanban</button>
-              </div>
+              <p className="text-surface-500 text-xs">{filteredLeads.length} lead(s) encontrado(s)</p>
             </div>
-
         <div className="flex flex-col gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500" />
@@ -416,22 +523,7 @@ export default function MyLeads() {
                 {detail.specific_video && (
                   <div className="col-span-2">
                     <p className="text-surface-500 text-xs mb-1">Vídeo que assistiu</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-surface-200 text-sm flex-1">🎬 {detail.specific_video}</p>
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const res = await generateTrackedLink({ lead_id: detail.id, url: detail.specific_video });
-                            const fullUrl = `${window.location.origin.replace('5173', '4031')}${res.data.tracked_url}`;
-                            navigator.clipboard.writeText(fullUrl);
-                            toast.success('Link rastreável copiado!');
-                          } catch (err) {}
-                        }}
-                        className="px-2 py-1 rounded-md bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 text-[10px] font-bold border border-brand-500/20 transition-all flex items-center gap-1"
-                      >
-                        <Link2 className="w-3 h-3" /> GERAR TRACKER
-                      </button>
-                    </div>
+                    <p className="text-surface-200 text-sm">🎬 {detail.specific_video}</p>
                   </div>
                 )}
                 {detail.interest && (
@@ -468,6 +560,17 @@ export default function MyLeads() {
                   onBlur={e => handleNextContact(e.target.value || null)}
                   className="input w-48" />
               </div>
+            </div>
+
+            {/* Fechar Venda (Explicit Button) */}
+            <div className="card p-5 border border-brand-500/20 bg-brand-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-brand-400 flex items-center gap-2"><Zap className="w-4 h-4" /> Finalizar Venda</h3>
+                <p className="text-xs text-surface-400 mt-1">Gere a venda e envie para o Faturamento.</p>
+              </div>
+              <button onClick={handleOpenSaleModal} className="btn-primary shadow-brand-500/20 shadow-lg shrink-0 whitespace-nowrap">
+                Fechar Venda Agora
+              </button>
             </div>
 
             {/* Add activity */}
@@ -584,6 +687,15 @@ export default function MyLeads() {
             <button onClick={() => setShowWppTemplates(false)} className="btn-secondary w-full">Cancelar</button>
           </div>
         </div>
+      )}
+
+      {/* Sale Modal */}
+      {showCloseModal && (
+        <CloseSaleModal 
+          lead={detail} 
+          onClose={() => setShowCloseModal(false)} 
+          onSuccess={handleSaleSuccess}
+        />
       )}
     </div>
   )
