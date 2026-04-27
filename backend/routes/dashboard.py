@@ -52,6 +52,23 @@ def get_dashboard():
     ranking_sdr = []
     ranking_closer = []
     if user['role'] == 'admin':
+        # Auto-migrate sales columns if they don't exist yet
+        try:
+            query("SELECT final_amount FROM sales LIMIT 1")
+        except Exception:
+            try:
+                query("""
+                    ALTER TABLE sales 
+                    ADD COLUMN payment_method ENUM('pix', 'credit_card', 'boleto', 'transfer') DEFAULT 'pix',
+                    ADD COLUMN installments INT DEFAULT 1,
+                    ADD COLUMN discount DECIMAL(10,2) DEFAULT 0.00,
+                    ADD COLUMN final_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER total_amount,
+                    ADD COLUMN observations TEXT NULL
+                """)
+                query("UPDATE sales SET final_amount = total_amount")
+            except Exception:
+                pass
+
         ranking_sdr = query("""
             SELECT v.name, COUNT(l.id) AS total,
                    SUM(CASE WHEN s.id >= 3 THEN 1 ELSE 0 END) AS qualificados
@@ -61,35 +78,37 @@ def get_dashboard():
             LEFT JOIN lead_statuses s ON l.status_id = s.id
             WHERE v.active=1 GROUP BY v.id, v.name ORDER BY qualificados DESC
         """)
-        ranking_closer = query("""
-            SELECT v.name, COUNT(DISTINCT l.id) AS total,
-                   SUM(CASE WHEN s.is_final=1 AND s.color='#22c55e' THEN 1 ELSE 0 END) AS convertidos,
-                   COALESCE(SUM(s2.final_amount), 0) as receita
-            FROM vendors v
-            JOIN users u ON v.user_id = u.id AND u.role = 'vendor'
-            LEFT JOIN leads l ON l.vendor_id = v.id
-            LEFT JOIN lead_statuses s ON l.status_id = s.id
-            LEFT JOIN sales s2 ON s2.vendor_id = v.id AND s2.lead_id = l.id
-            WHERE v.active=1 GROUP BY v.id, v.name ORDER BY receita DESC, convertidos DESC
-        """)
-        
-        # Auto-migrate if columns don't exist before querying (just in case)
         try:
-            query("SELECT final_amount FROM sales LIMIT 1")
-        except Exception:
-            execute("""
-                ALTER TABLE sales 
-                ADD COLUMN payment_method ENUM('pix', 'credit_card', 'boleto', 'transfer') DEFAULT 'pix',
-                ADD COLUMN installments INT DEFAULT 1,
-                ADD COLUMN discount DECIMAL(10,2) DEFAULT 0.00,
-                ADD COLUMN final_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER total_amount,
-                ADD COLUMN observations TEXT NULL
+            ranking_closer = query("""
+                SELECT v.name, COUNT(DISTINCT l.id) AS total,
+                       SUM(CASE WHEN s.is_final=1 AND s.color='#22c55e' THEN 1 ELSE 0 END) AS convertidos,
+                       COALESCE(SUM(s2.final_amount), 0) as receita
+                FROM vendors v
+                JOIN users u ON v.user_id = u.id AND u.role = 'vendor'
+                LEFT JOIN leads l ON l.vendor_id = v.id
+                LEFT JOIN lead_statuses s ON l.status_id = s.id
+                LEFT JOIN sales s2 ON s2.vendor_id = v.id AND s2.lead_id = l.id
+                WHERE v.active=1 GROUP BY v.id, v.name ORDER BY receita DESC, convertidos DESC
             """)
-            execute("UPDATE sales SET final_amount = total_amount")
+        except Exception:
+            ranking_closer = query("""
+                SELECT v.name, COUNT(DISTINCT l.id) AS total,
+                       SUM(CASE WHEN s.is_final=1 AND s.color='#22c55e' THEN 1 ELSE 0 END) AS convertidos,
+                       0 as receita
+                FROM vendors v
+                JOIN users u ON v.user_id = u.id AND u.role = 'vendor'
+                LEFT JOIN leads l ON l.vendor_id = v.id
+                LEFT JOIN lead_statuses s ON l.status_id = s.id
+                WHERE v.active=1 GROUP BY v.id, v.name ORDER BY convertidos DESC
+            """)
 
         # Receita total
-        receita_total = query("SELECT COALESCE(SUM(final_amount), 0) as r FROM sales", fetchone=True)['r']
-        receita_mes = query("SELECT COALESCE(SUM(final_amount), 0) as r FROM sales WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", fetchone=True)['r']
+        try:
+            receita_total = query("SELECT COALESCE(SUM(final_amount), 0) as r FROM sales", fetchone=True)['r']
+            receita_mes = query("SELECT COALESCE(SUM(final_amount), 0) as r FROM sales WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", fetchone=True)['r']
+        except Exception:
+            receita_total = 0
+            receita_mes = 0
     else:
         receita_total = 0
         receita_mes = 0
