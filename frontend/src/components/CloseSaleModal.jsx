@@ -21,7 +21,10 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
   // Payment info
   const [paymentMethod, setPaymentMethod] = useState('pix')
   const [installments, setInstallments] = useState(1)
-  const [discount, setDiscount] = useState('')
+  const [overallDiscount, setOverallDiscount] = useState('')
+  const [amountPaid, setAmountPaid] = useState('')
+  const [reminderDate, setReminderDate] = useState('')
+  const [reminderNotes, setReminderNotes] = useState('')
   const [observations, setObservations] = useState('')
 
   useEffect(() => {
@@ -41,7 +44,7 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
       if (existing) {
         return prev.map(i => i.product_id === prod.id ? { ...i, quantity: i.quantity + 1 } : i)
       }
-      return [...prev, { product_id: prod.id, product_name: prod.name, unit_price: prod.price, quantity: 1 }]
+      return [...prev, { product_id: prod.id, product_name: prod.name, unit_price: prod.price, quantity: 1, discount: 0, is_freebie: false }]
     })
     setSelectedProductId('')
   }
@@ -53,6 +56,14 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
   const handleUpdateQty = (idx, q) => {
     if (q < 1) return
     setItems(prev => prev.map((item, i) => i === idx ? { ...item, quantity: q } : item))
+  }
+
+  const handleUpdateItemDiscount = (idx, disc) => {
+    setItems(prev => prev.map((item, i) => i === idx ? { ...item, discount: parseFloat(disc) || 0 } : item))
+  }
+
+  const handleToggleFreebie = (idx) => {
+    setItems(prev => prev.map((item, i) => i === idx ? { ...item, is_freebie: !item.is_freebie } : item))
   }
 
   const handleSave = async (e) => {
@@ -68,7 +79,10 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
         billing_info: billing,
         payment_method: paymentMethod,
         installments: parseInt(installments) || 1,
-        discount: parseFloat(discount) || 0,
+        discount: parseFloat(overallDiscount) || 0,
+        amount_paid: parseFloat(amountPaid) || 0,
+        reminder_date: reminderDate,
+        reminder_notes: reminderNotes,
         observations
       })
       toast.success('Venda concluída e enviada ao faturamento!')
@@ -79,8 +93,10 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
     setSaving(false)
   }
 
-  const total = items.reduce((acc, item) => acc + (parseFloat(item.unit_price) * item.quantity), 0)
-  const finalTotal = Math.max(0, total - (parseFloat(discount) || 0))
+  const total = items.reduce((acc, item) => acc + (item.is_freebie ? 0 : parseFloat(item.unit_price) * item.quantity), 0)
+  const totalItemDiscounts = items.reduce((acc, item) => acc + (item.is_freebie ? 0 : parseFloat(item.discount || 0)), 0)
+  const finalTotal = Math.max(0, total - totalItemDiscounts - (parseFloat(overallDiscount) || 0))
+  const remainingBalance = Math.max(0, finalTotal - (parseFloat(amountPaid) || 0))
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-surface-950/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -136,14 +152,22 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                     <tr>
                       <th className="px-4 py-2">Produto</th>
                       <th className="px-4 py-2 w-24">Qtd</th>
-                      <th className="px-4 py-2 text-right">Preço</th>
+                      <th className="px-4 py-2 text-right">Preço Un.</th>
+                      <th className="px-4 py-2 text-right w-28">Desc. R$</th>
+                      <th className="px-4 py-2 text-center w-20">Brinde</th>
+                      <th className="px-4 py-2 text-right">Total</th>
                       <th className="px-4 py-2 text-center w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-800">
-                    {items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-3 font-medium text-surface-200">{item.product_name}</td>
+                    {items.map((item, idx) => {
+                      const itemTotal = item.is_freebie ? 0 : Math.max(0, (item.unit_price * item.quantity) - (item.discount || 0))
+                      return (
+                      <tr key={idx} className={item.is_freebie ? "bg-brand-500/5" : ""}>
+                        <td className="px-4 py-3 font-medium text-surface-200">
+                          {item.product_name}
+                          {item.is_freebie && <span className="ml-2 text-[10px] bg-brand-500/20 text-brand-400 px-1.5 py-0.5 rounded uppercase font-bold">Brinde</span>}
+                        </td>
                         <td className="px-4 py-3">
                           <input 
                             type="number" min="1" value={item.quantity} 
@@ -151,8 +175,28 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                             className="input !py-1 px-2 h-8"
                           />
                         </td>
+                        <td className="px-4 py-3 text-right font-mono text-surface-400">
+                          {parseFloat(item.unit_price).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                        </td>
+                        <td className="px-4 py-3">
+                          <input 
+                            type="number" min="0" step="0.01" value={item.discount || ''} 
+                            onChange={e => handleUpdateItemDiscount(idx, e.target.value)}
+                            disabled={item.is_freebie}
+                            className="input !py-1 px-2 h-8 text-right disabled:opacity-30"
+                            placeholder="0.00"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <input 
+                            type="checkbox" 
+                            checked={item.is_freebie} 
+                            onChange={() => handleToggleFreebie(idx)}
+                            className="w-4 h-4 rounded border-surface-700 bg-surface-800 text-brand-500 focus:ring-brand-500/20"
+                          />
+                        </td>
                         <td className="px-4 py-3 text-right font-mono text-green-400">
-                          R$ {(item.unit_price * item.quantity).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                          R$ {itemTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button onClick={() => handleRemoveItem(idx)} className="text-red-400 hover:text-red-300">
@@ -160,25 +204,25 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                     <tr className="bg-surface-950/50">
-                      <td colSpan="2" className="px-4 py-3 text-right font-bold text-surface-300 uppercase text-xs">Total:</td>
-                      <td className="px-4 py-3 text-right font-mono font-black text-brand-400 text-lg">
+                      <td colSpan="5" className="px-4 py-3 text-right font-bold text-surface-300 uppercase text-xs">Subtotal:</td>
+                      <td className="px-4 py-3 text-right font-mono font-black text-surface-200 text-lg">
                         R$ {total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                       </td>
                       <td></td>
                     </tr>
-                    {parseFloat(discount) > 0 && (
+                    {parseFloat(overallDiscount) > 0 && (
                       <tr className="bg-red-500/5">
-                        <td colSpan="2" className="px-4 py-2 text-right font-bold text-red-400 uppercase text-xs">Desconto:</td>
+                        <td colSpan="5" className="px-4 py-2 text-right font-bold text-red-400 uppercase text-xs">Desconto Extra Geral:</td>
                         <td className="px-4 py-2 text-right font-mono font-bold text-red-400">
-                          - R$ {parseFloat(discount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                          - R$ {parseFloat(overallDiscount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                         </td>
                         <td></td>
                       </tr>
                     )}
-                    <tr className="bg-surface-900">
-                      <td colSpan="2" className="px-4 py-3 text-right font-bold text-surface-200 uppercase text-sm">Valor Final:</td>
+                    <tr className="bg-surface-900 border-t border-surface-700">
+                      <td colSpan="5" className="px-4 py-3 text-right font-bold text-surface-200 uppercase text-sm">Valor Final:</td>
                       <td className="px-4 py-3 text-right font-mono font-black text-emerald-400 text-xl">
                         R$ {finalTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
                       </td>
@@ -225,17 +269,69 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                 )}
 
                 <div>
-                  <label className="label">Desconto (R$)</label>
+                  <label className="label">Desconto Extra (Geral R$)</label>
                   <input 
                     type="number" 
                     min="0" 
                     step="0.01" 
-                    value={discount} 
-                    onChange={e => setDiscount(e.target.value)} 
+                    value={overallDiscount} 
+                    onChange={e => setOverallDiscount(e.target.value)} 
                     placeholder="0.00" 
                     className="input font-mono"
                   />
                 </div>
+                
+                <div className="md:col-span-3 border-t border-surface-800 pt-4 mt-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label text-emerald-400 font-bold">Valor Pago Hoje (R$)</label>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={amountPaid} 
+                        onChange={e => setAmountPaid(e.target.value)} 
+                        placeholder={finalTotal.toFixed(2)} 
+                        className="input font-mono border-emerald-500/30 focus:border-emerald-500/50 bg-emerald-500/5"
+                      />
+                    </div>
+                    <div>
+                      <label className="label text-brand-400 font-bold">Em Haver (R$)</label>
+                      <div className="input font-mono bg-surface-950 text-brand-400 flex items-center">
+                        R$ {remainingBalance.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {remainingBalance > 0 && (
+                  <div className="md:col-span-3 bg-brand-500/10 border border-brand-500/20 p-4 rounded-xl space-y-4">
+                    <h4 className="text-brand-400 font-bold text-sm flex items-center gap-2">
+                      <Zap className="w-4 h-4" /> Agendar Cobrança (Lembrete)
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="label text-brand-300">Data de Vencimento/Cobrança</label>
+                        <input 
+                          type="datetime-local" 
+                          value={reminderDate}
+                          onChange={e => setReminderDate(e.target.value)}
+                          className="input border-brand-500/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="label text-brand-300">Anotações do Lembrete</label>
+                        <input 
+                          type="text" 
+                          value={reminderNotes}
+                          onChange={e => setReminderNotes(e.target.value)}
+                          placeholder="Ex: Cobrar segunda parcela..."
+                          className="input border-brand-500/30"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div>

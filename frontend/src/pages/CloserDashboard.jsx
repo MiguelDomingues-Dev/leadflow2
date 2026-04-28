@@ -35,16 +35,16 @@ export default function CloserDashboard({ data, load, loading }) {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="p-3 rounded-2xl bg-surface-800/40 border border-surface-800 text-center">
-                <p className="text-[10px] uppercase text-surface-500 mb-1">Vendas</p>
-                <p className="text-xl font-bold text-green-400">{fmt(totais?.mes_convertidos)}</p>
+                <p className="text-[10px] uppercase text-surface-500 mb-1">Meu Faturamento</p>
+                <p className="text-xl font-bold text-green-400">R$ {fmt(totais?.user_progress || 0)}</p>
               </div>
               <div className="p-3 rounded-2xl bg-surface-800/40 border border-surface-800 text-center">
-                <p className="text-[10px] uppercase text-surface-500 mb-1">Meta</p>
-                <p className="text-xl font-bold text-surface-100">{fmt(totais?.closer_goal)}</p>
+                <p className="text-[10px] uppercase text-surface-500 mb-1">Minha Meta</p>
+                <p className="text-xl font-bold text-surface-100">R$ {fmt(totais?.user_goal || totais?.closer_goal || 0)}</p>
               </div>
               <div className="p-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-center">
-                <p className="text-[10px] uppercase text-green-400 mb-1">Conversão</p>
-                <p className="text-xl font-bold text-surface-100">{pct(totais?.mes_convertidos, totais?.mes)}</p>
+                <p className="text-[10px] uppercase text-green-400 mb-1">Atingimento</p>
+                <p className="text-xl font-bold text-surface-100">{pct(totais?.user_progress || 0, totais?.user_goal || totais?.closer_goal || 1)}</p>
               </div>
             </div>
           </div>
@@ -53,11 +53,11 @@ export default function CloserDashboard({ data, load, loading }) {
                <circle cx="64" cy="64" r="58" fill="transparent" stroke="currentColor" strokeWidth="8" className="text-surface-800" />
                <circle cx="64" cy="64" r="58" fill="transparent" stroke="currentColor" strokeWidth="8" 
                  strokeDasharray={2 * Math.PI * 58}
-                 strokeDashoffset={2 * Math.PI * 58 * (1 - Math.min(1, (totais?.mes_convertidos || 0) / (totais?.closer_goal || 1)))}
+                 strokeDashoffset={2 * Math.PI * 58 * (1 - Math.min(1, (totais?.user_progress || 0) / (totais?.user_goal || totais?.closer_goal || 1)))}
                  strokeLinecap="round" className="text-green-500 transition-all duration-1000" />
              </svg>
              <div className="absolute inset-0 flex flex-col items-center justify-center">
-               <p className="text-2xl font-bold text-surface-100">{Math.round(((totais?.mes_convertidos || 0) / (totais?.closer_goal || 1)) * 100)}%</p>
+               <p className="text-2xl font-bold text-surface-100">{Math.round(((totais?.user_progress || 0) / (totais?.user_goal || totais?.closer_goal || 1)) * 100)}%</p>
              </div>
           </div>
         </div>

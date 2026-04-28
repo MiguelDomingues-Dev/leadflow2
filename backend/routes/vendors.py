@@ -38,3 +38,43 @@ def update_vendor(vid):
 def delete_vendor(vid):
     execute("UPDATE vendors SET active=0 WHERE id=%s", (vid,))
     return jsonify({'message': 'Desativado'})
+
+@vendors_bp.route('/<int:vid>/history', methods=['GET'])
+@admin_required
+def vendor_history(vid):
+    # Get vendor info
+    vendor = query("SELECT * FROM vendors WHERE id=%s", (vid,), fetchone=True)
+    if not vendor: return jsonify({'error': 'Vendedor não encontrado'}), 404
+    
+    # Get leads handled by this vendor
+    leads_sdr = query("SELECT COUNT(*) as c FROM leads WHERE sdr_id=%s", (vid,), fetchone=True)['c']
+    leads_closer = query("SELECT COUNT(*) as c FROM leads WHERE vendor_id=%s", (vid,), fetchone=True)['c']
+    
+    # Get sales closed by this vendor
+    sales = query("""
+        SELECT 
+            s.id, s.created_at, s.total_amount, s.final_amount, s.amount_paid, s.remaining_balance, s.status,
+            l.name as lead_name
+        FROM sales s
+        LEFT JOIN leads l ON s.lead_id = l.id
+        WHERE s.vendor_id = %s
+        ORDER BY s.created_at DESC
+    """, (vid,))
+    
+    total_sales = len(sales)
+    total_revenue = sum(float(s['final_amount']) for s in sales)
+    total_received = sum(float(s['amount_paid']) for s in sales)
+    total_pending = sum(float(s['remaining_balance']) for s in sales)
+    
+    return jsonify({
+        'vendor': vendor,
+        'metrics': {
+            'leads_as_sdr': leads_sdr,
+            'leads_as_closer': leads_closer,
+            'total_sales_count': total_sales,
+            'total_revenue': total_revenue,
+            'total_received': total_received,
+            'total_pending': total_pending
+        },
+        'sales': sales
+    })

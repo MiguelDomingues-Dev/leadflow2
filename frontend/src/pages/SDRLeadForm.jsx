@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Zap, ArrowLeft, Phone, CheckCircle, RefreshCw, Mic, Square, Trash2 } from 'lucide-react'
-import { createLead, getPlatforms, addAudioActivity } from '../api/client'
+import { createLead, getPlatforms, addAudioActivity, getVendors } from '../api/client'
 import toast from 'react-hot-toast'
 import { maskPhone } from '../utils/masks'
 
@@ -10,7 +10,8 @@ export default function SDRLeadForm() {
   const [platforms, setPlatforms] = useState([])
   const [saving, setSaving] = useState(false)
   const [sent, setSent] = useState(false)
-  const [form, setForm] = useState({ name: '', phone: '', platform_id: '', notes: '' })
+  const [form, setForm] = useState({ name: '', phone: '', platform_id: '', notes: '', vendor_id: '' })
+  const [vendors, setVendors] = useState([])
 
   // Audio recording state
   const [isRecording, setIsRecording] = useState(false)
@@ -21,6 +22,7 @@ export default function SDRLeadForm() {
 
   useEffect(() => {
     getPlatforms().then(r => setPlatforms(r.data || []))
+    getVendors().then(r => setVendors((r.data || []).filter(v => v.role === 'vendor' || v.role === 'admin')))
   }, [])
 
   // Cleanup timer on unmount
@@ -94,7 +96,7 @@ export default function SDRLeadForm() {
   }
 
   const reset = () => {
-    setForm({ name: '', phone: '', platform_id: '', notes: '' })
+    setForm({ name: '', phone: '', platform_id: '', notes: '', vendor_id: '' })
     setAudioBlob(null)
     setRecordingTime(0)
     setSent(false)
@@ -183,6 +185,21 @@ export default function SDRLeadForm() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Enviar para Closer */}
+          <div>
+            <label className="label">Transferir para Closer? (Opcional)</label>
+            <select
+              value={form.vendor_id}
+              onChange={set('vendor_id')}
+              className="input text-lg"
+            >
+              <option value="">Não (Manter na minha fila)</option>
+              {vendors.map(v => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+            </select>
           </div>
         </div>
 

@@ -24,6 +24,7 @@ api.interceptors.response.use(r => r, err => {
 export const login = d => api.post('/auth/login', d)
 export const logout = () => api.post('/auth/logout')
 export const getMe = () => api.get('/auth/me')
+export const updateMyGoal = d => api.put('/users/me/goal', d)
 export const setupAdmin = d => api.post('/auth/setup', d)
 export const changePass = d => api.put('/auth/change-password', d)
 export const getUsers = () => api.get('/users/')
@@ -68,3 +69,25 @@ export const createSale = d => api.post('/sales/', d)
 export const getSales = p => api.get('/sales/', { params: p })
 export const getSaleDetails = id => api.get('/sales/' + id)
 export const updateSaleStatus = (id, status) => api.put('/sales/' + id + '/status', { status })
+
+export const getPipelines = () => api.get('/pipelines/')
+export const createPipeline = d => api.post('/pipelines/', d)
+export const updatePipeline = (id, d) => api.put('/pipelines/' + id, d)
+export const deletePipeline = id => api.delete('/pipelines/' + id)
+
+export const getCustomFields = () => api.get('/custom-fields/')
+export const createCustomField = d => api.post('/custom-fields/', d)
+export const updateCustomField = (id, d) => api.put('/custom-fields/' + id, d)
+export const deleteCustomField = id => api.delete('/custom-fields/' + id)
+
+export const addLeadAttachment = (id, fd) => api.post('/leads/' + id + '/attachments', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+export const deleteLeadAttachment = (id, attId) => api.delete('/leads/' + id + '/attachments/' + attId)
+
+export const addSaleAttachment = (id, fd) => api.post('/sales/' + id + '/attachments', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+export const deleteSaleAttachment = (id, attId) => api.delete('/sales/' + id + '/attachments/' + attId)
+
+export const getReminders = p => api.get('/reminders/', { params: p })
+export const updateReminderStatus = (id, status) => api.put('/reminders/' + id + '/status', { status })
+export const deleteReminder = id => api.delete('/reminders/' + id)
+
+export const getVendorHistory = id => api.get('/vendors/' + id + '/history')

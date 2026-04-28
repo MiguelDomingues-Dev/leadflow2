@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Search, Plus, Trash2, Edit2, RefreshCw, Users, Download, MessageCircle, ChevronLeft, ChevronRight, X, Phone, Mail } from 'lucide-react'
-import { getLeads, getPlatforms, getVendors, getStatuses, deleteLead, updateLead, bulkActionLeads } from '../api/client'
+import { getLeads, getPlatforms, getVendors, getStatuses, deleteLead, updateLead, bulkActionLeads, getPipelines } from '../api/client'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
@@ -76,6 +76,8 @@ export default function Leads() {
   const [sdrF, setSdrF]           = useState('')
   const [vendorF, setVendorF]     = useState('')
   const [periodF, setPeriodF]     = useState('')
+  const [pipelineId, setPipelineId] = useState('')
+  const [pipelines, setPipelines] = useState([])
   const [exporting, setExporting] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
 
@@ -84,8 +86,24 @@ export default function Leads() {
   const load = useCallback(async (p = page) => {
     setLoading(true)
     try {
+      let pipes = pipelines
+      if (pipes.length === 0) {
+        const pReq = await getPipelines()
+        pipes = pReq.data.data || pReq.data || []
+        setPipelines(pipes)
+        if (pipes.length > 0 && !pipelineId) {
+          setPipelineId(String(pipes.find(p => p.is_default)?.id || pipes[0].id))
+          return
+        }
+      }
+
+      if (!pipelineId && pipes.length === 0) {
+        setLoading(false)
+        return
+      }
+
       const [l, plat, v, s] = await Promise.all([
-        getLeads({ search, platform_id: platF, status_id: statusF, sdr_id: sdrF, vendor_id: vendorF, period: periodF, page: p, per_page: PER_PAGE }),
+        getLeads({ search, pipeline_id: pipelineId, platform_id: platF, status_id: statusF, sdr_id: sdrF, vendor_id: vendorF, period: periodF, page: p, per_page: PER_PAGE }),
         getPlatforms(), getVendors(), getStatuses()
       ])
       // Backend may return { data, total } or just an array
@@ -97,12 +115,14 @@ export default function Leads() {
         setLeads(payload.data || [])
         setTotal(payload.total || 0)
       }
-      setPlatforms(plat.data); setVendors(v.data); setStatuses(s.data)
+      
+      const pipelineStatuses = s.data.filter(st => String(st.pipeline_id) === String(pipelineId))
+      setPlatforms(plat.data); setVendors(v.data); setStatuses(pipelineStatuses)
     } catch {}
     setLoading(false)
-  }, [search, platF, statusF, sdrF, vendorF, periodF, page])
+  }, [search, platF, statusF, sdrF, vendorF, periodF, page, pipelineId, pipelines])
 
-  useEffect(() => { setPage(1); load(1) }, [search, platF, statusF, sdrF, vendorF, periodF]) // eslint-disable-line
+  useEffect(() => { setPage(1); load(1) }, [search, platF, statusF, sdrF, vendorF, periodF, pipelineId]) // eslint-disable-line
   useEffect(() => { load(page) }, [page]) // eslint-disable-line
 
   const handleDelete = async (id, name) => {
@@ -123,7 +143,7 @@ export default function Leads() {
   const handleExportCSV = async () => {
     setExporting(true)
     try {
-      const all = await getLeads({ search, platform_id: platF, status_id: statusF, period: periodF, per_page: 9999 })
+      const all = await getLeads({ search, pipeline_id: pipelineId, platform_id: platF, status_id: statusF, period: periodF, per_page: 9999 })
       const rows = Array.isArray(all.data) ? all.data : (all.data.data || [])
       const header = ['ID','Nome','Telefone','Email','Plataforma','Vendedor','Status','Tempo Acompanha','Próx. Contato','Criado em']
       const lines = rows.map(l => [
@@ -227,6 +247,9 @@ export default function Leads() {
             </button>
           )}
         </div>
+        <select value={pipelineId} onChange={e => setPipelineId(e.target.value)} className="input w-auto min-w-40 font-bold border-brand-500 bg-brand-500/10 text-brand-400">
+          {pipelines.map(p => <option key={p.id} value={p.id} className="bg-surface-900 text-surface-200">{p.name}</option>)}
+        </select>
         <select value={platF} onChange={e => setPlatF(e.target.value)} className="input w-auto min-w-40">
           <option value="">Todas as plataformas</option>
           {platforms.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}

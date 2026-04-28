@@ -44,16 +44,16 @@ export default function SDRDashboard({ data, load, loading }) {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="p-3 rounded-2xl bg-surface-800/40 border border-surface-800 text-center">
-                <p className="text-[10px] uppercase text-surface-500 mb-1">Qualificados</p>
-                <p className="text-xl font-bold text-brand-400">{fmt(totais?.mes_qualificados)}</p>
+                <p className="text-[10px] uppercase text-surface-500 mb-1">Meus Qualificados</p>
+                <p className="text-xl font-bold text-brand-400">{fmt(totais?.user_progress || 0)}</p>
               </div>
               <div className="p-3 rounded-2xl bg-surface-800/40 border border-surface-800 text-center">
-                <p className="text-[10px] uppercase text-surface-500 mb-1">Meta</p>
-                <p className="text-xl font-bold text-surface-100">{fmt(totais?.sdr_goal)}</p>
+                <p className="text-[10px] uppercase text-surface-500 mb-1">Minha Meta</p>
+                <p className="text-xl font-bold text-surface-100">{fmt(totais?.user_goal || totais?.sdr_goal || 0)}</p>
               </div>
               <div className="p-3 rounded-2xl bg-brand-500/10 border border-brand-500/20 text-center">
-                <p className="text-[10px] uppercase text-brand-400 mb-1">Taxa</p>
-                <p className="text-xl font-bold text-surface-100">{pct(totais?.mes_qualificados, totais?.mes)}</p>
+                <p className="text-[10px] uppercase text-brand-400 mb-1">Atingimento</p>
+                <p className="text-xl font-bold text-surface-100">{pct(totais?.user_progress || 0, totais?.user_goal || totais?.sdr_goal || 1)}</p>
               </div>
             </div>
           </div>
@@ -62,11 +62,11 @@ export default function SDRDashboard({ data, load, loading }) {
                <circle cx="64" cy="64" r="58" fill="transparent" stroke="currentColor" strokeWidth="8" className="text-surface-800" />
                <circle cx="64" cy="64" r="58" fill="transparent" stroke="currentColor" strokeWidth="8" 
                  strokeDasharray={2 * Math.PI * 58}
-                 strokeDashoffset={2 * Math.PI * 58 * (1 - Math.min(1, (totais?.mes_qualificados || 0) / (totais?.sdr_goal || 1)))}
+                 strokeDashoffset={2 * Math.PI * 58 * (1 - Math.min(1, (totais?.user_progress || 0) / (totais?.user_goal || totais?.sdr_goal || 1)))}
                  strokeLinecap="round" className="text-brand-500 transition-all duration-1000" />
              </svg>
              <div className="absolute inset-0 flex flex-col items-center justify-center">
-               <p className="text-2xl font-bold text-surface-100">{Math.round(((totais?.mes_qualificados || 0) / (totais?.sdr_goal || 1)) * 100)}%</p>
+               <p className="text-2xl font-bold text-surface-100">{Math.round(((totais?.user_progress || 0) / (totais?.user_goal || totais?.sdr_goal || 1)) * 100)}%</p>
              </div>
           </div>
         </div>

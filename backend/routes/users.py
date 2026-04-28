@@ -61,6 +61,8 @@ def update_user(uid):
         fields.append("email=%s"); params.append(d['email'].strip().lower())
     if d.get('role') in ('admin','vendor','sdr','billing'):
         fields.append("role=%s"); params.append(d['role'])
+    if 'monthly_goal' in d:
+        fields.append("monthly_goal=%s"); params.append(d['monthly_goal'])
     if 'active' in d:
         fields.append("active=%s"); params.append(1 if d['active'] else 0)
     if d.get('password') and len(d['password']) >= 6:
@@ -80,3 +82,11 @@ def delete_user(uid):
     execute("UPDATE users SET active=0 WHERE id=%s", (uid,))
     execute("DELETE FROM auth_tokens WHERE user_id=%s", (uid,))
     return jsonify({'message': 'Usuario desativado'})
+
+@users_bp.route('/me/goal', methods=['PUT'])
+@login_required
+def update_my_goal():
+    d = request.json or {}
+    goal = d.get('monthly_goal', 0)
+    execute("UPDATE users SET monthly_goal=%s WHERE id=%s", (goal, g.user['id']))
+    return jsonify({'message': 'Meta atualizada com sucesso'})

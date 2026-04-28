@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, BarChart3, Megaphone, UserCheck, ChevronRight, Zap, LogOut, Settings, Shield, Tag, ClipboardList, CalendarClock, PlusCircle, User, Menu, PackageSearch, FileText } from 'lucide-react'
+import { LayoutDashboard, Users, BarChart3, Megaphone, UserCheck, ChevronRight, Zap, LogOut, Settings, Shield, Tag, ClipboardList, CalendarClock, PlusCircle, User, Menu, PackageSearch, FileText, Bell, History } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { logout, getLeads } from '../api/client'
 import toast from 'react-hot-toast'
@@ -16,6 +16,8 @@ const adminLinks = [
   { to:'/platforms',  label:'Plataformas',     icon:Megaphone },
   { to:'/statuses',   label:'Status dos Leads',icon:Tag },
   { to:'/vendors',    label:'Vendedores',      icon:UserCheck },
+  { to:'/vendor-history', label:'Histórico Vendedores', icon:History },
+  { to:'/lembretes',  label:'Cobranças/Avisos', icon:Bell },
   { to:'/users',      label:'Usuários',        icon:Shield },
 ]
 export default function Sidebar() {
@@ -42,10 +44,13 @@ export default function Sidebar() {
   const sdrLinks = [
     { to:'/sdr-inbox',  label:'Entrada de Leads', icon:Zap },
     { to:'/sdr-novo',   label:'Novo Lead',         icon:PlusCircle },
+    { to:'/lembretes',  label:'Cobranças/Avisos', icon:Bell },
   ]
   const closerLinks = [
     { to:'/meus-leads', label:'Leads Quentes',    icon:ClipboardList },
+    { to:'/novo-lead',  label:'Novo Lead',         icon:PlusCircle },
     { to:'/agenda',     label:'Minha Agenda',     icon:CalendarClock, badge: delayedCount },
+    { to:'/lembretes',  label:'Cobranças/Avisos', icon:Bell },
   ]
   const billingLinks = [
     { to:'/faturamento', label:'Fila de Faturamento', icon:FileText },
@@ -120,11 +125,13 @@ export function BottomNav() {
     { to: '/leads', icon: Users, label: 'Leads' },
     { to: '/leads/new', icon: PlusCircle, isFab: true },
     { to: '/analytics', icon: BarChart3, label: 'Métricas' },
+    { to: '/lembretes', icon: Bell, label: 'Avisos' },
     { to: '/perfil', icon: User, label: 'Perfil' },
   ]
   
   const sdrNav = [
     { to: '/sdr-inbox', icon: Zap, label: 'Inbox' },
+    { to: '/lembretes', icon: Bell, label: 'Avisos' },
     { to: '/sdr-novo', icon: PlusCircle, isFab: true },
     { to: '/perfil', icon: User, label: 'Perfil' },
   ]
@@ -132,6 +139,7 @@ export function BottomNav() {
   const vendorNav = [
     { to: '/meus-leads', icon: ClipboardList, label: 'Quentes' },
     { to: '/agenda', icon: CalendarClock, label: 'Agenda', badge: delayedCount },
+    { to: '/lembretes', icon: Bell, label: 'Avisos' },
     { to: '/novo-lead', icon: PlusCircle, isFab: true },
     { to: '/perfil', icon: User, label: 'Perfil' },
   ]

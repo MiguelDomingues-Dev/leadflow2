@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Search, RefreshCw, ChevronRight, MessageSquare, Phone, Calendar, ArrowUpRight, ArrowLeft, Mic, Square, Trash2, Zap } from 'lucide-react'
-import { getLeads, getLead, updateLead, addActivity, getStatuses, getPlatforms, addAudioActivity } from '../api/client'
+import { Search, RefreshCw, ChevronRight, MessageSquare, Phone, Calendar, ArrowUpRight, ArrowLeft, Mic, Square, Trash2, Zap, Paperclip, Upload, FileText } from 'lucide-react'
+import { getLeads, getLead, updateLead, addActivity, getStatuses, getPlatforms, addAudioActivity, getPipelines, addLeadAttachment, deleteLeadAttachment } from '../api/client'
 import toast from 'react-hot-toast'
 import { formatForDisplay, formatForInput } from '../utils/date'
 import CloseSaleModal from '../components/CloseSaleModal'
@@ -17,6 +17,8 @@ export default function MyLeads() {
   const [activeTab, setActiveTab] = useState('ativos')
   const [search, setSearch]     = useState('')
   const [statusF, setStatusF]   = useState('')
+  const [pipelineId, setPipelineId] = useState('')
+  const [pipelines, setPipelines] = useState([])
   const [selected, setSelected] = useState(null)
   const [detail, setDetail]     = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -28,6 +30,8 @@ export default function MyLeads() {
   const [showWppTemplates, setShowWppTemplates] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [targetStatusId, setTargetStatusId] = useState('')
+  const [uploadingAtt, setUploadingAtt] = useState(false)
+  const fileInputRef = useRef(null)
   
   // Audio recording state
   const [isRecording, setIsRecording] = useState(false)
@@ -51,12 +55,33 @@ export default function MyLeads() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
+      // First fetch pipelines if not loaded
+      let pipes = pipelines
+      if (pipes.length === 0) {
+        const pReq = await getPipelines()
+        pipes = pReq.data.data || pReq.data || []
+        setPipelines(pipes)
+        if (pipes.length > 0 && !pipelineId) {
+          setPipelineId(String(pipes.find(p => p.is_default)?.id || pipes[0].id))
+          return // Will re-trigger useEffect because pipelineId changes
+        }
+      }
+
+      if (!pipelineId && pipes.length === 0) {
+        setLoading(false)
+        return
+      }
+
       const [l, s] = await Promise.all([
-        getLeads({ search, per_page: 500 }),
+        getLeads({ search, pipeline_id: pipelineId, per_page: 500 }),
         getStatuses()
       ])
       const payload = Array.isArray(l.data) ? l.data : (l.data.data || [])
-      setLeads(payload); setStatuses(s.data)
+      setLeads(payload)
+      
+      // Filter statuses for the current pipeline
+      const pipelineStatuses = s.data.filter(st => String(st.pipeline_id) === String(pipelineId))
+      setStatuses(pipelineStatuses)
       
       // Auto-open lead from Agenda
       if (loc.state?.selectedLead && !selected) {
@@ -66,7 +91,7 @@ export default function MyLeads() {
       }
     } catch {}
     setLoading(false)
-  }, [search, loc.state, selected])
+  }, [search, loc.state, selected, pipelineId, pipelines])
 
   useEffect(() => { load() }, [load])
 
@@ -128,6 +153,31 @@ export default function MyLeads() {
       const r = await getLead(detail.id); 
       setDetail(r.data)
       load() // Refresh the list to reflect changes in Agenda/List
+    } catch {}
+  }
+
+  const handleUploadAttachment = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !detail) return
+    setUploadingAtt(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      await addLeadAttachment(detail.id, fd)
+      toast.success('Anexo enviado!')
+      openDetail(detail.id) // Refresh details
+    } catch {}
+    setUploadingAtt(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDeleteAttachment = async (attId) => {
+    if (!detail) return
+    if (!window.confirm('Excluir este anexo?')) return
+    try {
+      await deleteLeadAttachment(detail.id, attId)
+      toast.success('Anexo excluído')
+      openDetail(detail.id) // Refresh details
     } catch {}
   }
 
@@ -310,6 +360,9 @@ export default function MyLeads() {
                 <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Buscar..." className="input pl-9 text-sm w-48" />
               </div>
               <div className="flex bg-surface-900 rounded-lg p-1 border border-surface-800">
+                <select value={pipelineId} onChange={e => setPipelineId(e.target.value)} className="bg-transparent text-sm text-surface-200 outline-none px-2 cursor-pointer border-r border-surface-700">
+                  {pipelines.map(p => <option key={p.id} value={p.id} className="bg-surface-800">{p.name}</option>)}
+                </select>
                 <button onClick={() => setViewMode('list')} className="px-3 py-1.5 rounded-md text-sm font-medium text-surface-500 hover:text-surface-300">Lista</button>
                 <button className="px-3 py-1.5 rounded-md text-sm font-medium bg-surface-800 text-surface-100">Kanban</button>
               </div>
@@ -407,6 +460,9 @@ export default function MyLeads() {
                   </button>
                 </div>
                 <div className="flex bg-surface-900 rounded-lg p-1 border border-surface-800 ml-2">
+                  <select value={pipelineId} onChange={e => setPipelineId(e.target.value)} className="bg-transparent text-sm text-surface-200 outline-none px-2 cursor-pointer border-r border-surface-700">
+                    {pipelines.map(p => <option key={p.id} value={p.id} className="bg-surface-800">{p.name}</option>)}
+                  </select>
                   <button className="px-3 py-1.5 rounded-md text-sm font-medium bg-surface-800 text-surface-100">Lista</button>
                   <button onClick={() => { setViewMode('kanban'); setSelected(null); }} className="px-3 py-1.5 rounded-md text-sm font-medium text-surface-500 hover:text-surface-300">Kanban</button>
                 </div>
@@ -532,6 +588,16 @@ export default function MyLeads() {
                     <p className="text-surface-200 text-sm">{detail.interest}</p>
                   </div>
                 )}
+                
+                {/* Custom Fields */}
+                {detail.custom_fields && detail.custom_fields.length > 0 && detail.custom_fields.map(cf => (
+                  cf.value ? (
+                    <div key={cf.id} className="col-span-1 md:col-span-2">
+                      <p className="text-surface-500 text-xs mb-1">{cf.name}</p>
+                      <p className="text-surface-200 text-sm">{cf.value}</p>
+                    </div>
+                  ) : null
+                ))}
               </div>
             </div>
 
@@ -571,6 +637,45 @@ export default function MyLeads() {
               <button onClick={handleOpenSaleModal} className="btn-primary shadow-brand-500/20 shadow-lg shrink-0 whitespace-nowrap">
                 Fechar Venda Agora
               </button>
+            </div>
+            
+            {/* Anexos */}
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-surface-100 flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-surface-500" /> Anexos e Comprovantes
+                </h3>
+                <div>
+                  <input type="file" ref={fileInputRef} onChange={handleUploadAttachment} className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAtt} className="btn-secondary text-xs px-3 py-1.5 h-auto">
+                    {uploadingAtt ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    Anexar
+                  </button>
+                </div>
+              </div>
+              
+              {(!detail.attachments || detail.attachments.length === 0) ? (
+                <div className="text-center py-4 bg-surface-900/50 rounded-xl border border-surface-800 border-dashed">
+                  <p className="text-surface-500 text-xs">Nenhum anexo salvo para este lead.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {detail.attachments.map(att => (
+                    <div key={att.id} className="flex items-center justify-between p-2.5 bg-surface-900 border border-surface-700 rounded-xl">
+                      <a href={(import.meta.env.VITE_API_URL || 'http://localhost:4031/api').replace('/api', '') + '/api/uploads/' + att.file_path} target="_blank" rel="noreferrer" className="flex items-center gap-2 flex-1 min-w-0 hover:text-brand-400 transition-colors">
+                        <FileText className="w-4 h-4 text-surface-500 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-xs text-surface-200 truncate">{att.file_name}</p>
+                          <p className="text-[10px] text-surface-500 mt-0.5">{new Date(att.created_at).toLocaleDateString('pt-BR')}</p>
+                        </div>
+                      </a>
+                      <button onClick={() => handleDeleteAttachment(att.id)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors ml-2">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Add activity */}

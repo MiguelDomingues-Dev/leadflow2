@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { Save, ArrowLeft, Zap, CheckCircle } from 'lucide-react'
-import { getLead, createLead, updateLead, getPlatforms, getVendors, getStatuses } from '../api/client'
+import { getLead, createLead, updateLead, getPlatforms, getVendors, getStatuses, getPipelines, getCustomFields } from '../api/client'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Toaster } from 'react-hot-toast'
@@ -16,7 +16,7 @@ const FOLLOW_OPTIONS = [
   { value:'mais_6_meses',  label:'Mais de 6 meses' },
 ]
 
-const BLANK = { name:'', phone:'', email:'', platform_id:'', sdr_id:'', vendor_id:'', specific_video:'', follow_time:'nao_acompanha', interest:'', notes:'', status_id:'', next_contact:'' }
+const BLANK = { name:'', phone:'', email:'', platform_id:'', sdr_id:'', vendor_id:'', specific_video:'', follow_time:'nao_acompanha', interest:'', notes:'', status_id:'', pipeline_id:'', next_contact:'', custom_fields: {} }
 
 // ── Admin form (with sidebar layout) ─────────────────────────
 export function LeadForm() {
@@ -28,17 +28,28 @@ export function LeadForm() {
   const [platforms, setPlatforms] = useState([])
   const [vendors, setVendors]     = useState([])
   const [statuses, setStatuses]   = useState([])
+  const [pipelines, setPipelines] = useState([])
+  const [customFields, setCustomFields] = useState([])
   const [saving, setSaving]       = useState(false)
 
   useEffect(() => {
     const load = async () => {
-      const [p, v, s] = await Promise.all([getPlatforms(), getVendors(), getStatuses()])
-      setPlatforms(p.data); setVendors(v.data); setStatuses(s.data)
+      const [p, v, s, pipes, cf] = await Promise.all([getPlatforms(), getVendors(), getStatuses(), getPipelines(), getCustomFields()])
+      const pipesData = pipes.data.data || pipes.data || []
+      const cfData = cf.data.data || cf.data || []
+      setPlatforms(p.data); setVendors(v.data); setStatuses(s.data); setPipelines(pipesData); setCustomFields(cfData.filter(c => c.active))
       if (isEdit) {
         const l = await getLead(id)
         const data = l.data
-        data.next_contact = formatForInput(data.next_contact)
-        setForm({ ...BLANK, ...data, status_id: String(data.status_id || '') })
+        const custom_fields_dict = {}
+        if (data.custom_fields) {
+          data.custom_fields.forEach(c => { custom_fields_dict[c.id] = c.value })
+        }
+        setForm({ ...BLANK, ...data, status_id: String(data.status_id || ''), pipeline_id: String(data.pipeline_id || ''), next_contact: data.next_contact ? data.next_contact.replace(' ', 'T').slice(0, 16) : '', custom_fields: custom_fields_dict })
+      } else {
+        if (pipesData.length > 0) {
+          setForm(f => ({ ...f, pipeline_id: String(pipesData.find(p => p.is_default)?.id || pipesData[0].id) }))
+        }
       }
     }
     load()
@@ -75,7 +86,7 @@ export function LeadForm() {
           <p className="text-surface-500 text-sm">Preencha os dados do cliente</p>
         </div>
       </div>
-      <FormBody form={form} set={set} setForm={setForm} platforms={platforms} vendors={vendors} statuses={statuses}
+      <FormBody form={form} set={set} setForm={setForm} platforms={platforms} vendors={vendors} statuses={statuses} pipelines={pipelines} customFields={customFields}
         saving={saving} onSubmit={handleSubmit} isEdit={isEdit} showVendor={user?.role === 'admin'} showStatus={isEdit && user?.role === 'admin'} leadId={id} user={user} />
     </div>
   )
@@ -91,8 +102,13 @@ export function Collector() {
 
   useEffect(() => {
     const load = async () => {
-      const [p, v] = await Promise.all([getPlatforms(), getVendors()])
-      setPlatforms(p.data); setVendors(v.data)
+      const [p, v, pipes, cf] = await Promise.all([getPlatforms(), getVendors(), getPipelines(), getCustomFields()])
+      const pipesData = pipes.data.data || pipes.data || []
+      const cfData = cf.data.data || cf.data || []
+      setPlatforms(p.data); setVendors(v.data); setPipelines(pipesData); setCustomFields(cfData.filter(c => c.active))
+      if (pipesData.length > 0) {
+        setForm(f => ({ ...f, pipeline_id: String(pipesData.find(p => p.is_default)?.id || pipesData[0].id) }))
+      }
     }
     load()
   }, [])
@@ -137,7 +153,7 @@ export function Collector() {
           </div>
         ) : (
           <div className="card p-6">
-            <FormBody form={form} set={set} setForm={setForm} platforms={platforms} vendors={vendors} statuses={[]}
+            <FormBody form={form} set={set} setForm={setForm} platforms={platforms} vendors={vendors} statuses={[]} pipelines={pipelines} customFields={customFields}
               saving={saving} onSubmit={handleSubmit} isEdit={false} showVendor={true} showStatus={false}
               submitLabel="✓ Registrar Lead" />
           </div>
@@ -150,7 +166,10 @@ export function Collector() {
 }
 
 // ── Shared form body ──────────────────────────────────────────
-function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, onSubmit, isEdit, showVendor, showStatus, submitLabel, leadId, user }) {
+function FormBody({ form, set, setForm, platforms, vendors, statuses, pipelines, customFields, saving, onSubmit, isEdit, showVendor, showStatus, submitLabel, leadId, user }) {
+  const setCustomField = id => e => setForm(f => ({ ...f, custom_fields: { ...(f.custom_fields || {}), [id]: e.target.value } }))
+  const filteredStatuses = statuses.filter(s => String(s.pipeline_id) === String(form.pipeline_id))
+  
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {/* Cliente */}
@@ -175,6 +194,13 @@ function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, on
       {/* Origem */}
       <div className="card p-5 space-y-4">
         <h2 className="text-surface-100 font-semibold text-xs uppercase tracking-wider">Origem do Lead</h2>
+        <div>
+          <label className="label">Pipeline / Funil *</label>
+          <select value={form.pipeline_id || ''} onChange={set('pipeline_id')} className="input">
+            <option value="">Selecionar pipeline...</option>
+            {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
         <div>
           <label className="label">Plataforma de origem *</label>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -224,12 +250,12 @@ function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, on
             </div>
           </div>
         )}
-        {showStatus && statuses.length > 0 && (
+        {showStatus && filteredStatuses.length > 0 && (
           <div>
             <label className="label">Status</label>
             <select value={form.status_id || ''} onChange={set('status_id')} className="input">
               <option value="">Selecionar status...</option>
-              {statuses.map(s => (
+              {filteredStatuses.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
@@ -237,8 +263,25 @@ function FormBody({ form, set, setForm, platforms, vendors, statuses, saving, on
         )}
         <div>
           <label className="label">Próximo contato</label>
-          <input type="date" value={form.next_contact || ''} onChange={set('next_contact')} className="input" />
+          <input type="datetime-local" value={form.next_contact || ''} onChange={set('next_contact')} className="input" />
         </div>
+        
+        {/* Custom Fields */}
+        {customFields && customFields.length > 0 && (
+          <div className="pt-2 mt-4 border-t border-surface-800">
+            <h3 className="text-surface-300 font-medium text-sm mb-3">Campos Personalizados</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {customFields.map(cf => (
+                <div key={cf.id}>
+                  <label className="label">{cf.name}</label>
+                  {cf.type === 'text' && <input value={form.custom_fields?.[cf.id] || ''} onChange={setCustomField(cf.id)} className="input" />}
+                  {cf.type === 'number' && <input type="number" value={form.custom_fields?.[cf.id] || ''} onChange={setCustomField(cf.id)} className="input" />}
+                  {cf.type === 'date' && <input type="date" value={form.custom_fields?.[cf.id] || ''} onChange={setCustomField(cf.id)} className="input" />}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div>
           <label className="label">Observações</label>
           <textarea value={form.notes || ''} onChange={set('notes')} rows={3} placeholder="Anotações importantes sobre o lead..." className="input resize-none" />

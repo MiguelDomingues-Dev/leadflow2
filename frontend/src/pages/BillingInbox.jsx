@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { FileText, CheckCircle, Search, RefreshCw, Send, Package, User, X, CreditCard } from 'lucide-react'
-import { getSales, getSaleDetails, updateSaleStatus } from '../api/client'
+import { useState, useEffect, useRef } from 'react'
+import { FileText, CheckCircle, Search, RefreshCw, Send, Package, User, X, CreditCard, Paperclip, Trash2, Upload } from 'lucide-react'
+import { getSales, getSaleDetails, updateSaleStatus, addSaleAttachment, deleteSaleAttachment } from '../api/client'
 import { formatForDisplay } from '../utils/date'
 import toast from 'react-hot-toast'
 
@@ -11,6 +11,8 @@ export default function BillingInbox() {
   const [selectedSale, setSelectedSale] = useState(null)
   const [saleDetails, setSaleDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
+  const [uploadingAtt, setUploadingAtt] = useState(false)
+  const fileInputRef = useRef(null)
 
   const load = async () => {
     setLoading(true)
@@ -41,6 +43,31 @@ export default function BillingInbox() {
       setSelectedSale(null)
       setSaleDetails(null)
       load()
+    } catch {}
+  }
+
+  const handleUploadAttachment = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedSale) return
+    setUploadingAtt(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      await addSaleAttachment(selectedSale.id, fd)
+      toast.success('Anexo enviado!')
+      openSale(selectedSale) // Refresh details
+    } catch {}
+    setUploadingAtt(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDeleteAttachment = async (attId) => {
+    if (!selectedSale) return
+    if (!window.confirm('Excluir este anexo?')) return
+    try {
+      await deleteSaleAttachment(selectedSale.id, attId)
+      toast.success('Anexo excluído')
+      openSale(selectedSale) // Refresh details
     } catch {}
   }
 
@@ -210,6 +237,45 @@ export default function BillingInbox() {
                   <div className="mt-4 p-4 rounded-xl bg-surface-900 border border-surface-800">
                     <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">Observações do Vendedor</p>
                     <p className="text-sm text-surface-300 italic">{saleDetails.observations}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Anexos */}
+              <div className="mt-6 pt-6 border-t border-surface-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-surface-300 flex items-center gap-2 text-sm">
+                    <Paperclip className="w-4 h-4 text-surface-500" /> Anexos e Comprovantes
+                  </h3>
+                  <div>
+                    <input type="file" ref={fileInputRef} onChange={handleUploadAttachment} className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
+                    <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAtt} className="btn-secondary text-xs px-3 py-1.5 h-auto">
+                      {uploadingAtt ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      Anexar Arquivo
+                    </button>
+                  </div>
+                </div>
+                
+                {(!saleDetails.attachments || saleDetails.attachments.length === 0) ? (
+                  <div className="text-center py-6 bg-surface-900/50 rounded-xl border border-surface-800 border-dashed">
+                    <p className="text-surface-500 text-sm">Nenhum anexo salvo para esta venda.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {saleDetails.attachments.map(att => (
+                      <div key={att.id} className="flex items-center justify-between p-3 bg-surface-900 border border-surface-700 rounded-xl">
+                        <a href={(import.meta.env.VITE_API_URL || 'http://localhost:4031/api').replace('/api', '') + '/api/uploads/' + att.file_path} target="_blank" rel="noreferrer" className="flex items-center gap-2 flex-1 min-w-0 hover:text-brand-400 transition-colors">
+                          <FileText className="w-5 h-5 text-surface-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm text-surface-200 truncate">{att.file_name}</p>
+                            <p className="text-xs text-surface-500 mt-0.5">{new Date(att.created_at).toLocaleDateString('pt-BR')}</p>
+                          </div>
+                        </a>
+                        <button onClick={() => handleDeleteAttachment(att.id)} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors ml-2">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

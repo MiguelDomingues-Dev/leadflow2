@@ -7,9 +7,12 @@
 // Quebra "YYYY-MM-DD" em partes sem passar por Date()
 const _parts = (dateStr) => {
   if (!dateStr || typeof dateStr !== 'string') return null
-  const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):?(\d{2})?)?/)
   if (!m) return null
-  return { year: parseInt(m[1]), month: parseInt(m[2]), day: parseInt(m[3]) }
+  return { 
+    year: parseInt(m[1]), month: parseInt(m[2]), day: parseInt(m[3]),
+    hour: m[4] ? parseInt(m[4]) : null, minute: m[5] ? parseInt(m[5]) : null
+  }
 }
 
 // Formata para o atributo value de <input type="date">  →  YYYY-MM-DD
@@ -17,7 +20,13 @@ export const formatForInput = (dateStr) => {
   if (!dateStr) return ''
   // Se já vier como "YYYY-MM-DD", retorna direto (caminho mais comum)
   const p = _parts(dateStr)
-  if (p) return `${p.year}-${String(p.month).padStart(2,'0')}-${String(p.day).padStart(2,'0')}`
+  if (p) {
+    let base = `${p.year}-${String(p.month).padStart(2,'0')}-${String(p.day).padStart(2,'0')}`
+    if (p.hour !== null) {
+      base += `T${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`
+    }
+    return base
+  }
   // Fallback para strings com horário (ex: "Mon, 27 Apr 2026 00:00:00 GMT")
   // Extrai apenas a parte da data usando regex, sem usar new Date()
   const rfc = dateStr.match(/(\d{1,2})\s+(\w{3})\s+(\d{4})/)
@@ -33,7 +42,13 @@ export const formatForInput = (dateStr) => {
 export const formatForDisplay = (dateStr) => {
   if (!dateStr) return 'Sem data'
   const p = _parts(dateStr)
-  if (p) return `${String(p.day).padStart(2,'0')}/${String(p.month).padStart(2,'0')}/${p.year}`
+  if (p) {
+    let base = `${String(p.day).padStart(2,'0')}/${String(p.month).padStart(2,'0')}/${p.year}`
+    if (p.hour !== null) {
+      base += ` ${String(p.hour).padStart(2,'0')}:${String(p.minute).padStart(2,'0')}`
+    }
+    return base
+  }
   // Fallback RFC
   const rfc = dateStr.match(/(\d{1,2})\s+(\w{3})\s+(\d{4})/)
   if (rfc) {

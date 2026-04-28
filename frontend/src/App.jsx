@@ -18,11 +18,13 @@ import { Vendors } from './pages/Vendors'
 import { LeadForm } from './pages/LeadForm'
 import Settings from './pages/Settings'
 import Audit from './pages/Audit'
+import AdminVendorHistory from './pages/AdminVendorHistory'
 
 // Vendor / Closer pages
 import MyLeads   from './pages/MyLeads'
 import Agenda    from './pages/Agenda'
 import FocusMode from './pages/FocusMode'
+import Reminders from './pages/Reminders'
 
 // SDR pages
 import SDRInbox from './pages/SDRInbox'
@@ -55,6 +57,8 @@ export default function App() {
               <Route path="/users"         element={<Users />} />
               <Route path="/settings"      element={<Settings />} />
               <Route path="/audit"         element={<Audit />} />
+              <Route path="/vendor-history" element={<AdminVendorHistory />} />
+              <Route path="/lembretes"      element={<Reminders />} />
               <Route path="/perfil"        element={<Perfil />} />
             </Route>
           </Route>
@@ -64,6 +68,7 @@ export default function App() {
             <Route element={<Layout />}>
               <Route path="/sdr-inbox"   element={<SDRInbox />} />
               <Route path="/sdr-novo"    element={<SDRLeadForm />} />
+              <Route path="/lembretes"   element={<Reminders />} />
               <Route path="/perfil"      element={<Perfil />} />
             </Route>
           </Route>
@@ -74,6 +79,7 @@ export default function App() {
               <Route path="/meus-leads"  element={<MyLeads />} />
               <Route path="/novo-lead"   element={<LeadForm />} />
               <Route path="/agenda"      element={<Agenda />} />
+              <Route path="/lembretes"   element={<Reminders />} />
               <Route path="/foco"        element={<FocusMode />} />
               <Route path="/perfil"      element={<Perfil />} />
             </Route>

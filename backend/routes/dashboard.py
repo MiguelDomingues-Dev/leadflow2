@@ -143,6 +143,25 @@ def get_dashboard():
     _closer_row = query("SELECT `value` FROM settings WHERE `key`='closer_goal'", fetchone=True)
     sdr_goal = int(_sdr_row['value']) if _sdr_row and _sdr_row.get('value') else 100
     closer_goal = int(_closer_row['value']) if _closer_row and _closer_row.get('value') else 30
+    
+    # Busca a meta individual do usuário logado
+    u_row = query("SELECT monthly_goal FROM users WHERE id=%s", (user['id'],), fetchone=True)
+    user_goal = u_row['monthly_goal'] if u_row and u_row.get('monthly_goal') else 0
+    
+    user_progress = 0
+    if user['role'] == 'sdr':
+        # Quantos qualificados o SDR fez no mês
+        v_id_row = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (user['id'],), fetchone=True)
+        if v_id_row:
+            user_progress = cnt(f" AND l.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND l.status_id >= 3 AND l.sdr_id={v_id_row['id']}")
+    elif user['role'] == 'vendor':
+        # Qual a receita do Closer no mês
+        v_id_row = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (user['id'],), fetchone=True)
+        if v_id_row:
+            try:
+                user_progress = query(f"SELECT COALESCE(SUM(final_amount), 0) as r FROM sales WHERE vendor_id={v_id_row['id']} AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", fetchone=True)['r']
+            except Exception:
+                pass
 
     return jsonify({
         'totais': {
@@ -150,7 +169,8 @@ def get_dashboard():
             'esquecidos': esquecidos, 
             'sdr_goal': sdr_goal, 'mes_qualificados': mes_qualificados,
             'closer_goal': closer_goal, 'mes_convertidos': mes_convertidos,
-            'receita_total': receita_total, 'receita_mes': receita_mes
+            'receita_total': receita_total, 'receita_mes': receita_mes,
+            'user_goal': user_goal, 'user_progress': float(user_progress)
         },
         'funil': [dict(f) for f in funil],
         'por_plataforma': conv_rate,
