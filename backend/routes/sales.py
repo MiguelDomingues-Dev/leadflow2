@@ -27,6 +27,7 @@ def create_sale():
     observations = d.get('observations', '')
     
     amount_paid = float(d.get('amount_paid', 0))
+    shipping_cost = float(d.get('shipping_cost', 0))
     reminder_date = d.get('reminder_date')
     reminder_notes = d.get('reminder_notes', '')
     
@@ -49,7 +50,7 @@ def create_sale():
         total_amount += (uprice * qty)
         total_item_discounts += item_disc
         
-    final_amount = total_amount - total_item_discounts - overall_discount
+    final_amount = total_amount - total_item_discounts - overall_discount + shipping_cost
     if final_amount < 0: final_amount = 0
     
     remaining_balance = final_amount - amount_paid
@@ -60,9 +61,9 @@ def create_sale():
         
     # 1. Registrar a Venda
     sale_id = execute("""
-        INSERT INTO sales (lead_id, vendor_id, total_amount, payment_method, installments, discount, final_amount, amount_paid, remaining_balance, observations, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pendente_faturamento')
-    """, (lead_id, vendor_id, total_amount, payment_method, installments, overall_discount, final_amount, amount_paid, remaining_balance, observations))
+        INSERT INTO sales (lead_id, vendor_id, total_amount, payment_method, installments, discount, shipping_cost, final_amount, amount_paid, remaining_balance, observations, status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pendente_faturamento')
+    """, (lead_id, vendor_id, total_amount, payment_method, installments, overall_discount, shipping_cost, final_amount, amount_paid, remaining_balance, observations))
     
     # 2. Registrar os Itens da Venda
     for item in items:
@@ -86,6 +87,7 @@ def create_sale():
     # 3. Registrar e Criptografar Dados Sensíveis (Faturamento)
     execute("DELETE FROM lead_billing_info WHERE lead_id=%s", (lead_id,))
     
+    full_name = billing_info.get('full_name', '').strip()
     cpf = billing_info.get('cpf', '').strip()
     address = billing_info.get('address', '').strip()
     city = billing_info.get('city', '').strip()
@@ -94,16 +96,17 @@ def create_sale():
     
     execute("""
         INSERT INTO lead_billing_info 
-        (lead_id, cpf_encrypted, address_encrypted, city_encrypted, state_encrypted, zipcode_encrypted)
+        (lead_id, full_name_encrypted, cpf_encrypted, address_encrypted, city_encrypted, state_encrypted, zipcode_encrypted)
         VALUES (
             %s, 
             AES_ENCRYPT(%s, %s), 
             AES_ENCRYPT(%s, %s), 
             AES_ENCRYPT(%s, %s), 
             AES_ENCRYPT(%s, %s), 
+            AES_ENCRYPT(%s, %s), 
             AES_ENCRYPT(%s, %s)
         )
-    """, (lead_id, cpf, ENCRYPTION_KEY, address, ENCRYPTION_KEY, city, ENCRYPTION_KEY, state, ENCRYPTION_KEY, zipcode, ENCRYPTION_KEY))
+    """, (lead_id, full_name, ENCRYPTION_KEY, cpf, ENCRYPTION_KEY, address, ENCRYPTION_KEY, city, ENCRYPTION_KEY, state, ENCRYPTION_KEY, zipcode, ENCRYPTION_KEY))
     
     # 4. Registrar Lembrete (se houver saldo em haver)
     if remaining_balance > 0 and reminder_date:
@@ -203,6 +206,7 @@ def get_sale_details(sale_id):
     # mas o faturamento é quem emite a nota.
     billing_info = query("""
         SELECT 
+            CAST(AES_DECRYPT(full_name_encrypted, %s) AS CHAR) as full_name,
             CAST(AES_DECRYPT(cpf_encrypted, %s) AS CHAR) as cpf,
             CAST(AES_DECRYPT(address_encrypted, %s) AS CHAR) as address,
             CAST(AES_DECRYPT(city_encrypted, %s) AS CHAR) as city,
@@ -210,14 +214,16 @@ def get_sale_details(sale_id):
             CAST(AES_DECRYPT(zipcode_encrypted, %s) AS CHAR) as zipcode
         FROM lead_billing_info
         WHERE lead_id = %s
-    """, (ENCRYPTION_KEY, ENCRYPTION_KEY, ENCRYPTION_KEY, ENCRYPTION_KEY, ENCRYPTION_KEY, sale['lead_id']), fetchone=True)
+    """, (ENCRYPTION_KEY, ENCRYPTION_KEY, ENCRYPTION_KEY, ENCRYPTION_KEY, ENCRYPTION_KEY, ENCRYPTION_KEY, sale['lead_id']), fetchone=True)
     sale['billing_info'] = billing_info
     
     # 4. Busca anexos
     sale['attachments'] = query("SELECT * FROM attachments WHERE sale_id=%s ORDER BY created_at DESC", (sale_id,))
     
-    # 5. Busca lembretes
     sale['reminders'] = query("SELECT * FROM sale_reminders WHERE sale_id=%s ORDER BY due_date ASC", (sale_id,))
+    
+    # Adicionar o actual_shipping_cost
+    sale['actual_shipping_cost'] = float(sale.get('actual_shipping_cost', 0) or 0)
     
     return jsonify(sale)
 
@@ -244,6 +250,25 @@ def update_sale_status(sale_id):
     
     log_audit(g.user['id'], 'update_sale_status', target_id=sale_id, details=new_status)
     return jsonify({'message': 'Status da venda atualizado'})
+
+@sales_bp.route('/<int:sale_id>/shipping', methods=['PUT'])
+@login_required
+def update_sale_shipping(sale_id):
+    if not has_billing_access(g.user):
+        return jsonify({'error': 'Acesso negado'}), 403
+        
+    d = request.json or {}
+    actual_cost = float(d.get('actual_shipping_cost', 0))
+    
+    execute("UPDATE sales SET actual_shipping_cost=%s WHERE id=%s", (actual_cost, sale_id))
+    
+    # Registrar evento no lead
+    sale = query("SELECT lead_id FROM sales WHERE id=%s", (sale_id,), fetchone=True)
+    if sale:
+        execute("INSERT INTO lead_activities (lead_id, user_id, type, content) VALUES (%s, %s, 'note', %s)", (sale['lead_id'], g.user['id'], f"Valor real do frete atualizado para: R$ {actual_cost:.2f}"))
+    
+    log_audit(g.user['id'], 'update_sale_shipping', target_id=sale_id, details=str(actual_cost))
+    return jsonify({'message': 'Valor do frete atualizado'})
 
 import uuid
 from werkzeug.utils import secure_filename

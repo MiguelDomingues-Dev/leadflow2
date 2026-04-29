@@ -229,8 +229,8 @@ def create_lead():
     status_id = d.get('status_id') or (default_status['id'] if default_status else None)
 
     # Atribuição automática se for SDR ou Vendor
-    sdr_id = d.get('sdr_id')
-    vendor_id = d.get('vendor_id')
+    sdr_id = d.get('sdr_id') or None
+    vendor_id = d.get('vendor_id') or None
     
     if g.user['role'] == 'sdr':
         v_row = query("SELECT id FROM vendors WHERE user_id=%s AND active=1", (g.user['id'],), fetchone=True)
@@ -271,9 +271,10 @@ def update_lead(lid):
     if not row: return jsonify({'error': 'Nao encontrado'}), 404
 
     old_status = row['status_id']
-    new_status = d.get('status_id', old_status)
+    new_status = d.get('status_id') or old_status
     old_vendor = row['vendor_id']
-    new_vendor = d.get('vendor_id', old_vendor)
+    new_vendor = d.get('vendor_id') or old_vendor
+    new_sdr    = d.get('sdr_id') or row['sdr_id']
 
     execute("""
         UPDATE leads SET name=%s,phone=%s,email=%s,platform_id=%s,sdr_id=%s,vendor_id=%s,
@@ -283,7 +284,7 @@ def update_lead(lid):
     """, (d.get('name', row['name']), d.get('phone', row['phone']),
           (d.get('email','') or '').strip() or None,
           d.get('platform_id', row['platform_id']),
-          d.get('sdr_id', row['sdr_id']),
+          new_sdr,
           new_vendor,
           new_status,
           d.get('pipeline_id', row.get('pipeline_id')),

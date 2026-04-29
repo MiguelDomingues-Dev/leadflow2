@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { FileText, CheckCircle, Search, RefreshCw, Send, Package, User, X, CreditCard, Paperclip, Trash2, Upload } from 'lucide-react'
-import { getSales, getSaleDetails, updateSaleStatus, addSaleAttachment, deleteSaleAttachment } from '../api/client'
+import { getSales, getSaleDetails, updateSaleStatus, addSaleAttachment, deleteSaleAttachment, updateSaleShipping } from '../api/client'
 import { formatForDisplay } from '../utils/date'
 import toast from 'react-hot-toast'
 
@@ -12,6 +12,8 @@ export default function BillingInbox() {
   const [saleDetails, setSaleDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [uploadingAtt, setUploadingAtt] = useState(false)
+  const [actualShippingCost, setActualShippingCost] = useState('')
+  const [updatingShipping, setUpdatingShipping] = useState(false)
   const fileInputRef = useRef(null)
 
   const load = async () => {
@@ -31,6 +33,7 @@ export default function BillingInbox() {
     try {
       const res = await getSaleDetails(s.id)
       setSaleDetails(res.data)
+      setActualShippingCost(res.data.actual_shipping_cost || '')
     } catch {}
     setLoadingDetails(false)
   }
@@ -69,6 +72,17 @@ export default function BillingInbox() {
       toast.success('Anexo excluído')
       openSale(selectedSale) // Refresh details
     } catch {}
+  }
+
+  const handleUpdateShipping = async () => {
+    if (!selectedSale) return
+    setUpdatingShipping(true)
+    try {
+      await updateSaleShipping(selectedSale.id, parseFloat(actualShippingCost) || 0)
+      toast.success('Valor do frete real atualizado!')
+      openSale(selectedSale) // Refresh details
+    } catch {}
+    setUpdatingShipping(false)
   }
 
   return (
@@ -162,8 +176,8 @@ export default function BillingInbox() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wide text-surface-500">Nome do Cliente</p>
-                    <p className="font-bold text-surface-200">{saleDetails.lead_name}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-surface-500">Nome Completo (NF)</p>
+                    <p className="font-bold text-surface-200">{saleDetails.billing_info?.full_name || saleDetails.lead_name}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-surface-500">CPF</p>
@@ -211,7 +225,7 @@ export default function BillingInbox() {
                 <h3 className="font-bold text-surface-300 mb-4 flex items-center gap-2 text-sm">
                   <CreditCard className="w-4 h-4 text-surface-500" /> Pagamento e Negociação
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-surface-500">Forma</p>
                     <p className="font-bold text-surface-200">
@@ -223,6 +237,10 @@ export default function BillingInbox() {
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-surface-500">Parcelas</p>
                     <p className="font-bold text-surface-200">{saleDetails.installments}x</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-surface-500">Frete</p>
+                    <p className="font-bold text-blue-400">R$ {parseFloat(saleDetails.shipping_cost || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-surface-500">Desconto</p>
@@ -239,6 +257,56 @@ export default function BillingInbox() {
                     <p className="text-sm text-surface-300 italic">{saleDetails.observations}</p>
                   </div>
                 )}
+
+                {/* Frete Real (Controle) */}
+                <div className="mt-4 p-5 rounded-2xl bg-blue-500/5 border border-blue-500/20">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-bold text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                      <Package className="w-4 h-4" /> Controle de Frete Real
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20">
+                      ADMIN / FATURAMENTO
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="p-3 rounded-xl bg-surface-900 border border-surface-800">
+                      <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">Frete Simulado (Vendedor)</p>
+                      <p className="text-lg font-mono font-bold text-surface-300">R$ {parseFloat(saleDetails.shipping_cost || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-wide text-blue-400 font-bold">Valor Real do Frete (Cotação Final)</label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 font-mono text-sm">R$</span>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            value={actualShippingCost}
+                            onChange={e => setActualShippingCost(e.target.value)}
+                            className="input pl-10 font-mono border-blue-500/30 focus:border-blue-500/50" 
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <button 
+                          onClick={handleUpdateShipping}
+                          disabled={updatingShipping}
+                          className="btn-primary bg-blue-600 hover:bg-blue-700 px-4 h-[42px]"
+                        >
+                          {updatingShipping ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                          Salvar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {parseFloat(actualShippingCost) > parseFloat(saleDetails.shipping_cost || 0) && (
+                    <p className="mt-3 text-xs text-red-400 flex items-center gap-1.5 font-bold animate-pulse">
+                      ⚠️ Atenção: Frete real maior que o simulado! Perda de margem de R$ {(parseFloat(actualShippingCost) - parseFloat(saleDetails.shipping_cost || 0)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Anexos */}

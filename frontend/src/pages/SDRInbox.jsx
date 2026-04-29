@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, RefreshCw, Phone, Zap, MessageSquare, X, CheckCircle, ChevronRight, Plus, ArrowLeft, Mic, Square, Trash2 } from 'lucide-react'
+import { Search, RefreshCw, Phone, Zap, MessageSquare, X, CheckCircle, ChevronRight, Plus, ArrowLeft, Mic, Square, Trash2, ShoppingCart } from 'lucide-react'
 import { getLeads, getLead, getVendors, getStatuses, qualifyLead, addActivity, updateLead, addAudioActivity } from '../api/client'
+import CloseSaleModal from '../components/CloseSaleModal'
 import { formatForDisplay, formatForInput } from '../utils/date'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -64,7 +65,7 @@ function LeadCard({ lead, onOpen, isSelected }) {
   )
 }
 
-function QualifyDrawer({ lead, vendors, onClose, onQualified }) {
+function QualifyDrawer({ lead, vendors, onClose, onQualified, onOpenSale }) {
   const [note, setNote] = useState('')
   const [vendorId, setVendorId] = useState('')
   const [saving, setSaving] = useState(false)
@@ -279,6 +280,14 @@ function QualifyDrawer({ lead, vendors, onClose, onQualified }) {
       {/* Action buttons */}
       <div className="p-5 border-t border-surface-800 space-y-2">
         <button
+          onClick={onOpenSale}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black text-base transition-all shadow-lg shadow-green-600/30 mb-2"
+        >
+          <ShoppingCart className="w-5 h-5" />
+          REALIZAR VENDA (DIRETO)
+        </button>
+
+        <button
           onClick={handleQualify}
           disabled={saving}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-base transition-all shadow-lg shadow-brand-600/30 disabled:opacity-60"
@@ -307,6 +316,7 @@ export default function SDRInbox() {
   const [selectedLead, setSelectedLead] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [showCloseSale, setShowCloseSale] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 400)
@@ -348,7 +358,13 @@ export default function SDRInbox() {
     await load()
   }
 
-  const filtered = leads.filter(l => !statusFilter || String(l.status_id) === statusFilter)
+  const filtered = leads.filter(l => {
+    const matchStatus = !statusFilter || String(l.status_id) === statusFilter
+    // Oculta leads que já foram enviados para um Closer (vendor_id preenchido)
+    // mas permite vê-los se estiver pesquisando ou filtrando por um status específico
+    if (!statusFilter && !search && l.vendor_id) return false
+    return matchStatus
+  })
   const counts = leads.reduce((a, l) => { a[l.status_id] = (a[l.status_id] || 0) + 1; return a }, {})
 
   const newLeads = leads.filter(l => l.status_id === 1 || l.status_name === 'Novo').length
@@ -441,9 +457,21 @@ export default function SDRInbox() {
             vendors={vendors}
             onClose={() => { setSelectedId(null); setSelectedLead(null) }}
             onQualified={handleQualified}
+            onOpenSale={() => setShowCloseSale(true)}
           />
         ) : null}
       </div>
+
+      {showCloseSale && selectedLead && (
+        <CloseSaleModal 
+          lead={selectedLead} 
+          onClose={() => setShowCloseSale(false)} 
+          onSuccess={() => {
+            setShowCloseSale(false)
+            handleQualified()
+          }} 
+        />
+      )}
     </div>
   )
 }

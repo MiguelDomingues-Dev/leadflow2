@@ -15,13 +15,19 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
   
   // Billing info
   const [billing, setBilling] = useState({
+    full_name: lead.name || '',
     cpf: '', address: '', city: '', state: '', zipcode: ''
   })
+  
+  // Search
+  const [productSearch, setProductSearch] = useState('')
+  const [showProductList, setShowProductList] = useState(false)
   
   // Payment info
   const [paymentMethod, setPaymentMethod] = useState('pix')
   const [installments, setInstallments] = useState(1)
   const [overallDiscount, setOverallDiscount] = useState('')
+  const [shippingCost, setShippingCost] = useState('')
   const [amountPaid, setAmountPaid] = useState('')
   const [reminderDate, setReminderDate] = useState('')
   const [reminderNotes, setReminderNotes] = useState('')
@@ -34,19 +40,11 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
     })
   }, [])
 
-  const handleAddItem = () => {
-    if (!selectedProductId) return
-    const prod = products.find(p => p.id === parseInt(selectedProductId))
+  const handleAddItem = (prod) => {
     if (!prod) return
-    
-    setItems(prev => {
-      const existing = prev.find(i => i.product_id === prod.id)
-      if (existing) {
-        return prev.map(i => i.product_id === prod.id ? { ...i, quantity: i.quantity + 1 } : i)
-      }
-      return [...prev, { product_id: prod.id, product_name: prod.name, unit_price: prod.price, quantity: 1, discount: 0, is_freebie: false }]
-    })
-    setSelectedProductId('')
+    setItems(prev => [...prev, { product_id: prod.id, product_name: prod.name, unit_price: prod.price, quantity: 1, discount: 0, is_freebie: false }])
+    setProductSearch('')
+    setShowProductList(false)
   }
 
   const handleRemoveItem = (idx) => {
@@ -54,8 +52,9 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
   }
 
   const handleUpdateQty = (idx, q) => {
-    if (q < 1) return
-    setItems(prev => prev.map((item, i) => i === idx ? { ...item, quantity: q } : item))
+    const qty = Math.floor(parseInt(q) || 1)
+    if (qty < 1) return
+    setItems(prev => prev.map((item, i) => i === idx ? { ...item, quantity: qty } : item))
   }
 
   const handleUpdateItemDiscount = (idx, disc) => {
@@ -80,6 +79,7 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
         payment_method: paymentMethod,
         installments: parseInt(installments) || 1,
         discount: parseFloat(overallDiscount) || 0,
+        shipping_cost: parseFloat(shippingCost) || 0,
         amount_paid: parseFloat(amountPaid) || 0,
         reminder_date: reminderDate,
         reminder_notes: reminderNotes,
@@ -95,12 +95,12 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
 
   const total = items.reduce((acc, item) => acc + (item.is_freebie ? 0 : parseFloat(item.unit_price) * item.quantity), 0)
   const totalItemDiscounts = items.reduce((acc, item) => acc + (item.is_freebie ? 0 : parseFloat(item.discount || 0)), 0)
-  const finalTotal = Math.max(0, total - totalItemDiscounts - (parseFloat(overallDiscount) || 0))
+  const finalTotal = Math.max(0, total - totalItemDiscounts - (parseFloat(overallDiscount) || 0) + (parseFloat(shippingCost) || 0))
   const remainingBalance = Math.max(0, finalTotal - (parseFloat(amountPaid) || 0))
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-surface-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-surface-900 border border-surface-800 rounded-2xl shadow-2xl flex flex-col max-h-[95vh]">
+      <div className="w-full max-w-4xl bg-surface-900 border border-surface-800 rounded-2xl shadow-2xl flex flex-col max-h-[95vh]">
         
         {/* Header */}
         <div className="p-5 border-b border-surface-800 flex items-center justify-between shrink-0">
@@ -124,39 +124,63 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
               <ShoppingCart className="w-4 h-4 text-surface-500" /> Produtos Vendidos
             </h3>
             
-            <div className="flex gap-2 mb-4">
-              <select 
-                value={selectedProductId} 
-                onChange={e => setSelectedProductId(e.target.value)}
-                className="input flex-1"
-                disabled={loading}
-              >
-                <option value="">-- Selecione o Produto --</option>
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} (R$ {parseFloat(p.price).toLocaleString('pt-BR')})</option>
-                ))}
-              </select>
-              <button 
-                type="button"
-                onClick={handleAddItem}
-                className="btn-secondary whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" /> Adicionar
-              </button>
+            <div className="relative mb-4">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input 
+                    type="text"
+                    value={productSearch}
+                    onChange={e => { setProductSearch(e.target.value); setShowProductList(true) }}
+                    onFocus={() => setShowProductList(true)}
+                    placeholder="🔍 Digite o nome do produto para buscar..."
+                    className="input w-full"
+                  />
+                  {showProductList && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-xl shadow-xl max-h-60 overflow-y-auto overflow-x-hidden">
+                      {(() => {
+                        const filtered = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                        if (filtered.length === 0) return <div className="p-4 text-center text-surface-500 text-sm italic">Nenhum produto encontrado</div>
+                        return filtered.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handleAddItem(p)}
+                            className="w-full text-left px-4 py-3 hover:bg-surface-700 border-b border-surface-700 last:border-0 transition-colors"
+                          >
+                            <p className="font-bold text-surface-100">{p.name}</p>
+                            <p className="text-xs text-brand-400 font-mono">R$ {parseFloat(p.price).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                          </button>
+                        ))
+                      })()}
+                    </div>
+                  )}
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowProductList(!showProductList)}
+                  className="btn-secondary whitespace-nowrap"
+                >
+                  Ver Lista
+                </button>
+              </div>
+              {showProductList && (
+                <div className="fixed inset-0 z-40" onClick={() => setShowProductList(false)} />
+              )}
             </div>
 
             {items.length > 0 ? (
+              <>
               <div className="border border-surface-800 rounded-xl overflow-hidden">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-surface-800/50 text-surface-400">
                     <tr>
-                      <th className="px-4 py-2">Produto</th>
-                      <th className="px-4 py-2 w-24">Qtd</th>
-                      <th className="px-4 py-2 text-right">Preço Un.</th>
-                      <th className="px-4 py-2 text-right w-28">Desc. R$</th>
-                      <th className="px-4 py-2 text-center w-20">Brinde</th>
-                      <th className="px-4 py-2 text-right">Total</th>
-                      <th className="px-4 py-2 text-center w-10"></th>
+                      <th className="px-4 py-3">Produto</th>
+                      <th className="px-4 py-3 w-28 text-center">Qtd</th>
+                      <th className="px-4 py-3 text-right w-32">Preço Un.</th>
+                      <th className="px-4 py-3 text-right w-36">Desc. R$</th>
+                      <th className="px-4 py-3 text-center w-20">Brinde</th>
+                      <th className="px-4 py-3 text-right w-40">Total</th>
+                      <th className="px-4 py-3 text-center w-12"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-800">
@@ -170,9 +194,9 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                         </td>
                         <td className="px-4 py-3">
                           <input 
-                            type="number" min="1" value={item.quantity} 
-                            onChange={e => handleUpdateQty(idx, parseInt(e.target.value))}
-                            className="input !py-1 px-2 h-8"
+                            type="number" min="1" step="1" value={item.quantity} 
+                            onChange={e => handleUpdateQty(idx, e.target.value)}
+                            className="input !py-1 px-2 h-8 w-20 text-center"
                           />
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-surface-400">
@@ -183,7 +207,7 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                             type="number" min="0" step="0.01" value={item.discount || ''} 
                             onChange={e => handleUpdateItemDiscount(idx, e.target.value)}
                             disabled={item.is_freebie}
-                            className="input !py-1 px-2 h-8 text-right disabled:opacity-30"
+                            className="input !py-1 px-2 h-8 w-28 text-right disabled:opacity-30"
                             placeholder="0.00"
                           />
                         </td>
@@ -205,32 +229,39 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                         </td>
                       </tr>
                     )})}
-                    <tr className="bg-surface-950/50">
-                      <td colSpan="5" className="px-4 py-3 text-right font-bold text-surface-300 uppercase text-xs">Subtotal:</td>
-                      <td className="px-4 py-3 text-right font-mono font-black text-surface-200 text-lg">
-                        R$ {total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                      </td>
-                      <td></td>
-                    </tr>
-                    {parseFloat(overallDiscount) > 0 && (
-                      <tr className="bg-red-500/5">
-                        <td colSpan="5" className="px-4 py-2 text-right font-bold text-red-400 uppercase text-xs">Desconto Extra Geral:</td>
-                        <td className="px-4 py-2 text-right font-mono font-bold text-red-400">
-                          - R$ {parseFloat(overallDiscount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                        </td>
-                        <td></td>
-                      </tr>
-                    )}
-                    <tr className="bg-surface-900 border-t border-surface-700">
-                      <td colSpan="5" className="px-4 py-3 text-right font-bold text-surface-200 uppercase text-sm">Valor Final:</td>
-                      <td className="px-4 py-3 text-right font-mono font-black text-emerald-400 text-xl">
-                        R$ {finalTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                      </td>
-                      <td></td>
-                    </tr>
                   </tbody>
                 </table>
               </div>
+
+              {/* Resumo Financeiro da Tabela */}
+              <div className="mt-4 flex flex-col items-end space-y-2 px-2">
+                <div className="flex justify-between w-full max-w-xs text-sm">
+                  <span className="text-surface-400 uppercase font-bold tracking-wider">Subtotal:</span>
+                  <span className="text-surface-200 font-mono font-bold">R$ {total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                </div>
+                
+                {parseFloat(overallDiscount) > 0 && (
+                  <div className="flex justify-between w-full max-w-xs text-sm">
+                    <span className="text-red-400 uppercase font-bold tracking-wider italic">Desconto Geral:</span>
+                    <span className="text-red-400 font-mono font-bold">- R$ {parseFloat(overallDiscount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                
+                {parseFloat(shippingCost) > 0 && (
+                  <div className="flex justify-between w-full max-w-xs text-sm">
+                    <span className="text-blue-400 uppercase font-bold tracking-wider">Frete:</span>
+                    <span className="text-blue-400 font-mono font-bold">+ R$ {parseFloat(shippingCost).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between w-full max-w-xs pt-2 border-t border-surface-700">
+                  <span className="text-surface-100 uppercase font-black tracking-widest text-base">Valor Final:</span>
+                  <span className="text-emerald-400 font-mono font-black text-2xl tracking-tighter">
+                    R$ {finalTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                  </span>
+                </div>
+              </div>
+              </>
             ) : (
               <div className="text-center py-6 border border-dashed border-surface-700 rounded-xl text-surface-500 text-sm">
                 Nenhum produto adicionado à venda.
@@ -244,7 +275,7 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
               <CreditCard className="w-4 h-4 text-surface-500" /> Pagamento e Negociação
             </h3>
             <div className="card p-4 bg-surface-900 border border-surface-800 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="label">Forma de Pagamento *</label>
                   <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="input">
@@ -255,7 +286,7 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                   </select>
                 </div>
                 
-                {paymentMethod === 'credit_card' ? (
+                {paymentMethod === 'credit_card' && (
                   <div>
                     <label className="label">Parcelas</label>
                     <select value={installments} onChange={e => setInstallments(e.target.value)} className="input">
@@ -264,8 +295,6 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                       ))}
                     </select>
                   </div>
-                ) : (
-                  <div></div>
                 )}
 
                 <div>
@@ -277,11 +306,24 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
                     value={overallDiscount} 
                     onChange={e => setOverallDiscount(e.target.value)} 
                     placeholder="0.00" 
-                    className="input font-mono"
+                    className="input font-mono w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Valor do Frete (R$)</label>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    step="0.01" 
+                    value={shippingCost} 
+                    onChange={e => setShippingCost(e.target.value)} 
+                    placeholder="0.00" 
+                    className="input font-mono border-blue-500/20 focus:border-blue-500/50 bg-blue-500/5"
                   />
                 </div>
                 
-                <div className="md:col-span-3 border-t border-surface-800 pt-4 mt-2">
+                <div className="md:col-span-4 border-t border-surface-800 pt-4 mt-2">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="label text-emerald-400 font-bold">Valor Pago Hoje (R$)</label>
@@ -359,6 +401,15 @@ export default function CloseSaleModal({ lead, onClose, onSuccess }) {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="label">Nome Completo do Cliente *</label>
+                <input 
+                  value={billing.full_name} 
+                  onChange={e => setBilling({...billing, full_name: e.target.value})}
+                  className="input" 
+                  placeholder="Nome completo para nota fiscal"
+                />
+              </div>
               <div>
                 <label className="label">CPF do Cliente *</label>
                 <input 

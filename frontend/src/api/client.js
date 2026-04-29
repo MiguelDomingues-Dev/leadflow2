@@ -69,6 +69,7 @@ export const createSale = d => api.post('/sales/', d)
 export const getSales = p => api.get('/sales/', { params: p })
 export const getSaleDetails = id => api.get('/sales/' + id)
 export const updateSaleStatus = (id, status) => api.put('/sales/' + id + '/status', { status })
+export const updateSaleShipping = (id, actual_shipping_cost) => api.put('/sales/' + id + '/shipping', { actual_shipping_cost })
 
 export const getPipelines = () => api.get('/pipelines/')
 export const createPipeline = d => api.post('/pipelines/', d)
